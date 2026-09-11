@@ -7,6 +7,7 @@ import type { GatewayProfile } from '@/types/portal'
 import { MockAdapter } from './mock'
 import { OpenWAAdapter } from './openwa'
 import { EvolutionAdapter } from './evolution'
+import { DEFAULT_BACKEND_URL } from '@/lib/backend'
 
 const STORAGE_KEY = 'waportal.gateway'
 
@@ -17,7 +18,7 @@ export function loadProfile(): GatewayProfile {
   } catch {
     /* fall through */
   }
-  return { kind: 'portal', baseUrl: 'http://localhost:8787', apiKey: '' }
+  return { kind: 'portal', baseUrl: DEFAULT_BACKEND_URL, apiKey: '' }
 }
 
 export function saveProfile(p: GatewayProfile) {

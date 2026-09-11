@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "NODE_ENV=production node server/src/index.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

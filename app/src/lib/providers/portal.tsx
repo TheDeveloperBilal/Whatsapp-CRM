@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { playHandoffSound, requestNotificationPermission, showBrowserNotification } from '@/lib/sound'
-import { PortalClient } from '@/lib/backend'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
 import type { TenantUser } from '@/lib/backend'
 import { PortalCtx } from '@/lib/portal-context'
 import type { PortalState } from '@/lib/portal-state'
@@ -54,7 +54,7 @@ interface Props {
 
 export function LiveProvider({ children, profile, updateProfile }: Props) {
   const client = useMemo(
-    () => new PortalClient(profile.baseUrl || 'http://localhost:8787'),
+    () => new PortalClient(profile.baseUrl || DEFAULT_BACKEND_URL),
     [profile.baseUrl],
   )
 

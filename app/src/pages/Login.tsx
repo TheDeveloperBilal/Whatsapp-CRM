@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PortalClient } from '@/lib/backend'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
 import { setToken } from '@/lib/auth'
 
-const client = new PortalClient('http://localhost:8787')
+const client = new PortalClient(DEFAULT_BACKEND_URL)
 
 interface Props {
   onLogin: () => void

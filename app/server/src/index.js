@@ -3,8 +3,12 @@
 // (Railway/Render/VPS) and db.js swaps to Supabase Postgres.
 
 import http from 'node:http'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import express from 'express'
 import cors from 'cors'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { WebSocketServer } from 'ws'
 import { collection, upsert, save, uid } from './db.js'
 import { waEvents, resumeSessions, sendText } from './wa.js'
@@ -29,6 +33,16 @@ function broadcast(event) {
 }
 
 app.use('/api', buildApi(broadcast))
+
+// In production, Express serves the built React app as static files.
+// Run `npm run build` first, then `npm start`.
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.resolve(__dirname, '../../dist')
+  app.use(express.static(distPath))
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+}
 
 // ─── ingest inbound/outbound WhatsApp events into the CRM ───────────────────
 

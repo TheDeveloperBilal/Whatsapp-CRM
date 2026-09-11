@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { toast } from 'sonner'
 import { usePortal } from '@/lib/store'
+import { DEFAULT_BACKEND_URL } from '@/lib/backend'
 import type { GatewayKind } from '@/types/portal'
 
 const options: Array<{ value: GatewayKind; title: string; desc: string; defaultUrl: string }> = [
@@ -14,7 +15,7 @@ const options: Array<{ value: GatewayKind; title: string; desc: string; defaultU
     value: 'portal',
     title: 'Portal backend (recommended, live)',
     desc: 'The built-in local backend: Baileys WhatsApp engine + AI auto-responder + WebSocket events. Starts automatically with npm run dev.',
-    defaultUrl: 'http://localhost:8787',
+    defaultUrl: DEFAULT_BACKEND_URL || 'http://localhost:8787',
   },
   {
     value: 'mock',

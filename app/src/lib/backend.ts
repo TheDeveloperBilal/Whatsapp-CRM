@@ -1,4 +1,9 @@
 // ─── Portal backend client (REST + WebSocket) ───────────────────────────────
+// In production Express serves both API and frontend on the same port,
+// so we use a relative URL. In dev the backend is on :8787 separately.
+export const DEFAULT_BACKEND_URL: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  (import.meta.env.PROD ? '' : 'http://localhost:8787')
 import type {
   Tenant,
   Tag,
