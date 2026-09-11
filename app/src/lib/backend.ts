@@ -1,0 +1,287 @@
+// ─── Portal backend client (REST + WebSocket) ───────────────────────────────
+import type {
+  Tenant,
+  Tag,
+  WaSession,
+  Contact,
+  Conversation,
+  Message,
+  BotRule,
+  BotConfig,
+  AutomationRule,
+  CannedResponse,
+  KbArticle,
+  Product,
+  AuthUser,
+  DashboardStats,
+} from '@/types/portal'
+import { getToken, clearToken } from '@/lib/auth'
+
+export interface Bootstrap {
+  tags: Tag[]
+  sessions: WaSession[]
+  contacts: Contact[]
+  conversations: Conversation[]
+  botRules: BotRule[]
+  botConfig: BotConfig | null
+  automations: AutomationRule[]
+  cannedResponses: CannedResponse[]
+  knowledgeBase: KbArticle[]
+  products: Product[]
+  stats: DashboardStats
+}
+
+export type ServerEvent =
+  | { type: 'message'; message: Message; conversation: Conversation; contact: Contact }
+  | { type: 'message.status'; id: string; conversationId: string; status: Message['status'] }
+  | { type: 'conversation'; conversation: Conversation }
+  | { type: 'contact'; contact: Contact }
+  | { type: 'contacts.synced'; tenantId: string }
+  | { type: 'session'; session: WaSession }
+  | { type: 'session.deleted'; sessionId: string }
+  | { type: 'bot.rule'; rule: BotRule }
+  | { type: 'bot.rule.deleted'; ruleId: string }
+  | { type: 'bot.config'; config: BotConfig }
+  | { type: 'automation'; automation: AutomationRule }
+  | { type: 'automation.deleted'; automationId: string }
+  | { type: 'canned.response'; cannedResponse: CannedResponse }
+  | { type: 'canned.response.deleted'; id: string }
+  | { type: 'kb.article'; article: KbArticle }
+  | { type: 'kb.article.deleted'; id: string }
+  | { type: 'product'; product: Product }
+  | { type: 'product.deleted'; id: string }
+  | { type: 'human.requested'; conversation: Conversation; contact: Contact }
+  | { type: 'tenant'; tenant: Tenant }
+  | { type: 'tenant.deleted'; tenantId: string }
+
+export interface TenantUser {
+  id: string
+  username: string
+  tenantId: string
+  role: string
+}
+
+export class PortalClient {
+  baseUrl: string
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, '')
+  }
+
+  private async req<T>(path: string, init?: RequestInit): Promise<T> {
+    const token = getToken()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> ?? {}) }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`${this.baseUrl}/api${path}`, { ...init, headers })
+    if (res.status === 401) {
+      clearToken()
+      window.dispatchEvent(new CustomEvent('portal:unauthorized'))
+      throw new Error('unauthorized')
+    }
+    if (!res.ok) throw new Error(`portal ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    return res.json() as Promise<T>
+  }
+
+  login(username: string, password: string) {
+    return this.req<{ token: string; user: AuthUser }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    })
+  }
+
+  changePassword(oldPassword: string, newPassword: string) {
+    return this.req<{ ok: boolean }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ oldPassword, newPassword }),
+    })
+  }
+
+  health() {
+    return this.req<{ ok: boolean; ai: { configured: boolean; model: string } }>('/health')
+  }
+  tenants() {
+    return this.req<Tenant[]>('/tenants')
+  }
+  bootstrap(tenantId: string) {
+    return this.req<Bootstrap>(`/tenants/${tenantId}/bootstrap`)
+  }
+  messages(conversationId: string) {
+    return this.req<Message[]>(`/conversations/${conversationId}/messages`)
+  }
+  sendMessage(conversationId: string, text: string) {
+    return this.req<Message>(`/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    })
+  }
+  patchConversation(conversationId: string, patch: Partial<Conversation>) {
+    return this.req<Conversation>(`/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  patchContact(contactId: string, patch: Partial<Contact>) {
+    return this.req<Contact>(`/contacts/${contactId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  createSession(tenantId: string, name: string) {
+    return this.req<WaSession>('/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ tenantId, name }),
+    })
+  }
+  startSession(sessionId: string) {
+    return this.req<WaSession>(`/sessions/${sessionId}/start`, { method: 'POST' })
+  }
+  deleteSession(sessionId: string) {
+    return this.req<{ ok: boolean }>(`/sessions/${sessionId}`, { method: 'DELETE' })
+  }
+  saveBotRule(tenantId: string, rule: BotRule) {
+    return this.req<BotRule>(`/tenants/${tenantId}/bot-rules`, {
+      method: 'POST',
+      body: JSON.stringify(rule),
+    })
+  }
+  deleteBotRule(ruleId: string) {
+    return this.req<{ ok: boolean }>(`/bot-rules/${ruleId}`, { method: 'DELETE' })
+  }
+  patchBotConfig(tenantId: string, patch: Partial<BotConfig>) {
+    return this.req<BotConfig>(`/tenants/${tenantId}/bot-config`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  patchAutomation(id: string, patch: Partial<AutomationRule>) {
+    return this.req<AutomationRule>(`/automations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  postAutomation(tenantId: string, rule: Omit<AutomationRule, 'id' | 'tenantId'>) {
+    return this.req<AutomationRule>(`/tenants/${tenantId}/automations`, {
+      method: 'POST',
+      body: JSON.stringify(rule),
+    })
+  }
+  deleteAutomation(id: string) {
+    return this.req<{ ok: boolean }>(`/automations/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Canned responses ──
+  postCannedResponse(tenantId: string, cr: Omit<CannedResponse, 'id' | 'tenantId'>) {
+    return this.req<CannedResponse>(`/tenants/${tenantId}/canned-responses`, {
+      method: 'POST',
+      body: JSON.stringify(cr),
+    })
+  }
+  patchCannedResponse(id: string, patch: Partial<CannedResponse>) {
+    return this.req<CannedResponse>(`/canned-responses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deleteCannedResponse(id: string) {
+    return this.req<{ ok: boolean }>(`/canned-responses/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Knowledge base ──
+  postKbArticle(tenantId: string, article: Omit<KbArticle, 'id' | 'tenantId'>) {
+    return this.req<KbArticle>(`/tenants/${tenantId}/kb`, {
+      method: 'POST',
+      body: JSON.stringify(article),
+    })
+  }
+  patchKbArticle(id: string, patch: Partial<KbArticle>) {
+    return this.req<KbArticle>(`/kb/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deleteKbArticle(id: string) {
+    return this.req<{ ok: boolean }>(`/kb/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Products ──
+  postProduct(tenantId: string, product: Omit<Product, 'id' | 'tenantId'>) {
+    return this.req<Product>(`/tenants/${tenantId}/products`, {
+      method: 'POST',
+      body: JSON.stringify(product),
+    })
+  }
+  patchProduct(id: string, patch: Partial<Product>) {
+    return this.req<Product>(`/products/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deleteProduct(id: string) {
+    return this.req<{ ok: boolean }>(`/products/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Tenant CRUD (superadmin) ──
+  createTenant(data: { name: string; slug: string; plan: string; adminUsername: string; adminPassword: string }) {
+    return this.req<{ tenant: Tenant; user: TenantUser }>('/tenants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+  updateTenant(id: string, patch: { name?: string; plan?: string; suspended?: boolean }) {
+    return this.req<Tenant>(`/tenants/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deleteTenant(id: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${id}`, { method: 'DELETE' })
+  }
+  getTenantUsers(tenantId: string) {
+    return this.req<TenantUser[]>(`/tenants/${tenantId}/users`)
+  }
+  createTenantUser(tenantId: string, data: { username: string; password: string; role?: string }) {
+    return this.req<TenantUser>(`/tenants/${tenantId}/users`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+  deleteTenantUser(tenantId: string, userId: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/users/${userId}`, { method: 'DELETE' })
+  }
+
+  // ── Broadcast ──
+  broadcast(tenantId: string, message: string, contactIds: string[]) {
+    return this.req<{ sent: number; failed: number; results: { contactId: string; ok: boolean; error?: string }[] }>(
+      `/tenants/${tenantId}/broadcast`,
+      { method: 'POST', body: JSON.stringify({ message, contactIds }) },
+    )
+  }
+
+  connect(onEvent: (e: ServerEvent) => void): () => void {
+    const wsUrl = `${this.baseUrl.replace(/^http/, 'ws')}/ws`
+    let ws: WebSocket | null = null
+    let closed = false
+    let retry: ReturnType<typeof setTimeout>
+
+    const open = () => {
+      ws = new WebSocket(wsUrl)
+      ws.onmessage = (ev) => {
+        try {
+          onEvent(JSON.parse(ev.data) as ServerEvent)
+        } catch {
+          /* ignore malformed frames */
+        }
+      }
+      ws.onclose = () => {
+        if (!closed) retry = setTimeout(open, 3000) // auto-reconnect
+      }
+    }
+    open()
+
+    return () => {
+      closed = true
+      clearTimeout(retry)
+      ws?.close()
+    }
+  }
+}
