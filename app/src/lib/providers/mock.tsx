@@ -259,12 +259,12 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
 
   const logout = useCallback(() => { window.location.href = '/' }, [])
 
-  const createTenant = useCallback(async (data: { name: string; slug: string; plan: string; adminUsername: string; adminPassword: string }) => {
-    const t = { id: `t${Date.now()}`, name: data.name, slug: data.slug, plan: data.plan as 'free' | 'pro' | 'business', suspended: false, members: [], createdAt: new Date().toISOString() }
+  const createTenant = useCallback(async (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => {
+    const t = { id: `t${Date.now()}`, name: data.name, slug: data.slug, plan: data.plan as 'free' | 'pro' | 'business', businessType: (data.businessType ?? 'service') as 'service' | 'digital' | 'physical', suspended: false, members: [], createdAt: new Date().toISOString() }
     return t
   }, [])
 
-  const updateTenant = useCallback(async (_id: string, _patch: { name?: string; plan?: string; suspended?: boolean }) => {}, [])
+  const updateTenant = useCallback(async (_id: string, _patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => {}, [])
   const deleteTenant = useCallback(async (_id: string) => {}, [])
   const getTenantUsers = useCallback(async (_tenantId: string): Promise<TenantUser[]> => [], [])
   const createTenantUser = useCallback(async (tenantId: string, data: { username: string; password: string; role?: string }): Promise<TenantUser> => {

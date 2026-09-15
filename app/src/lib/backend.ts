@@ -226,13 +226,13 @@ export class PortalClient {
   }
 
   // ── Tenant CRUD (superadmin) ──
-  createTenant(data: { name: string; slug: string; plan: string; adminUsername: string; adminPassword: string }) {
+  createTenant(data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) {
     return this.req<{ tenant: Tenant; user: TenantUser }>('/tenants', {
       method: 'POST',
       body: JSON.stringify(data),
     })
   }
-  updateTenant(id: string, patch: { name?: string; plan?: string; suspended?: boolean }) {
+  updateTenant(id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) {
     return this.req<Tenant>(`/tenants/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),

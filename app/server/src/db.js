@@ -22,6 +22,7 @@ const seed = () => ({
       name: 'My Workspace',
       slug: 'default',
       plan: 'business',
+      businessType: 'service',
       suspended: false,
       createdAt: new Date().toISOString(),
       members: [
@@ -84,6 +85,15 @@ if (fs.existsSync(DB_FILE)) {
 } else {
   db = seed()
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2))
+}
+
+// Migrate existing tenants: add businessType if missing
+if (db.tenants) {
+  let migrated = false
+  for (const t of db.tenants) {
+    if (!t.businessType) { t.businessType = 'service'; migrated = true }
+  }
+  if (migrated) { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); console.log('[db] Migrated tenants: added businessType field') }
 }
 
 // Initialize users collection on existing databases (upgrade path)

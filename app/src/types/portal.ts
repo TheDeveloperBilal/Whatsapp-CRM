@@ -5,6 +5,14 @@
 
 export type TenantRole = 'owner' | 'admin' | 'agent' | 'viewer'
 
+export type BusinessType = 'service' | 'digital' | 'physical'
+
+export const BUSINESS_TYPE_META: Record<BusinessType, { label: string; emoji: string; productLabel: string; color: string }> = {
+  service:  { label: 'Service Business',   emoji: '🛠️', productLabel: 'Services',         color: 'blue'   },
+  digital:  { label: 'Digital Products',   emoji: '💻', productLabel: 'Digital Products',  color: 'purple' },
+  physical: { label: 'Physical Products',  emoji: '📦', productLabel: 'Product Catalog',   color: 'orange' },
+}
+
 export interface TeamMember {
   id: string
   name: string
@@ -18,6 +26,7 @@ export interface Tenant {
   name: string
   slug: string
   plan: 'free' | 'pro' | 'business'
+  businessType: BusinessType
   suspended?: boolean
   members: TeamMember[]
   createdAt: string

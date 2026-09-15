@@ -17,7 +17,11 @@ import {
   LogOut,
   ShieldCheck,
   UserCircle,
+  Wrench,
+  MonitorSmartphone,
 } from 'lucide-react'
+import type { BusinessType } from '@/types/portal'
+import { BUSINESS_TYPE_META } from '@/types/portal'
 import {
   Sidebar,
   SidebarContent,
@@ -45,20 +49,27 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { usePortal } from '@/lib/store'
 
-const nav = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/inbox', label: 'Inbox', icon: MessagesSquare },
-  { to: '/contacts', label: 'Contacts', icon: Users },
-  { to: '/bots', label: 'AI Auto-Responder', icon: Bot },
-  { to: '/sessions', label: 'WhatsApp Sessions', icon: Smartphone },
-  { to: '/automation', label: 'Automation', icon: Workflow },
-  { to: '/products', label: 'Product Catalog', icon: Package },
-  { to: '/canned-responses', label: 'Canned Responses', icon: MessageSquareDashed },
-  { to: '/broadcast', label: 'Broadcast', icon: Megaphone },
-  { to: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
-  { to: '/tenants', label: 'Tenants & Team', icon: Building2 },
-  { to: '/settings', label: 'Settings', icon: Settings },
-]
+function getNav(businessType: BusinessType) {
+  const meta = BUSINESS_TYPE_META[businessType] ?? BUSINESS_TYPE_META.service
+  return [
+    { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+    { to: '/inbox', label: 'Inbox', icon: MessagesSquare },
+    { to: '/contacts', label: 'Contacts', icon: Users },
+    { to: '/bots', label: 'AI Auto-Responder', icon: Bot },
+    { to: '/sessions', label: 'WhatsApp Sessions', icon: Smartphone },
+    { to: '/automation', label: 'Automation', icon: Workflow },
+    {
+      to: '/products',
+      label: meta.productLabel,
+      icon: businessType === 'service' ? Wrench : businessType === 'digital' ? MonitorSmartphone : Package,
+    },
+    { to: '/canned-responses', label: 'Canned Responses', icon: MessageSquareDashed },
+    { to: '/broadcast', label: 'Broadcast', icon: Megaphone },
+    { to: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
+    { to: '/tenants', label: 'Tenants & Team', icon: Building2 },
+    { to: '/settings', label: 'Settings', icon: Settings },
+  ]
+}
 
 const titles: Record<string, string> = {
   '/': 'Overview',
@@ -81,6 +92,9 @@ export default function AppLayout() {
   const unread = conversations.reduce((n, c) => n + c.unread, 0)
   const connected = sessions.filter((s) => s.status === 'connected').length
   const isSuperAdmin = currentUser?.role === 'superadmin'
+  const businessType: BusinessType = (tenant.businessType ?? 'service') as BusinessType
+  const nav = getNav(businessType)
+  const btMeta = BUSINESS_TYPE_META[businessType] ?? BUSINESS_TYPE_META.service
 
   return (
     <SidebarProvider>
@@ -97,7 +111,7 @@ export default function AppLayout() {
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-semibold">{tenant.name}</span>
                       <span className="truncate text-xs text-muted-foreground capitalize">
-                        {tenant.plan} plan
+                        {btMeta.emoji} {btMeta.label} · {tenant.plan}
                       </span>
                     </div>
                     <ChevronsUpDown className="ml-auto size-4" />

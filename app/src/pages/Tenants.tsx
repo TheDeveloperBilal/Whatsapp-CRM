@@ -24,8 +24,16 @@ import {
 import { cn } from '@/lib/utils'
 import { usePortal } from '@/lib/store'
 import type { TenantUser } from '@/lib/backend'
+import { BUSINESS_TYPE_META } from '@/types/portal'
 // local type aliases to avoid verbatimModuleSyntax issues
 type LocalTenantRole = 'owner' | 'admin' | 'agent' | 'viewer'
+type LocalBusinessType = 'service' | 'digital' | 'physical'
+
+const BT_OPTIONS: { value: LocalBusinessType; label: string; emoji: string; desc: string }[] = [
+  { value: 'service',  emoji: '🛠️', label: 'Service Business',  desc: 'Logo design, web dev, writing, consulting...' },
+  { value: 'digital',  emoji: '💻', label: 'Digital Products',  desc: 'E-books, games, software, courses...' },
+  { value: 'physical', emoji: '📦', label: 'Physical Products', desc: 'Clothing, electronics, food, goods...' },
+]
 
 const roleIcon: Record<LocalTenantRole, typeof Crown> = {
   owner: Crown,
@@ -44,12 +52,13 @@ interface CreateTenantForm {
   name: string
   slug: string
   plan: string
+  businessType: string
   adminUsername: string
   adminPassword: string
 }
 
 const emptyCreate: CreateTenantForm = {
-  name: '', slug: '', plan: 'free', adminUsername: '', adminPassword: '',
+  name: '', slug: '', plan: 'free', businessType: 'service', adminUsername: '', adminPassword: '',
 }
 
 export default function Tenants() {
@@ -71,6 +80,7 @@ export default function Tenants() {
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editPlan, setEditPlan] = useState('free')
+  const [editBusinessType, setEditBusinessType] = useState<LocalBusinessType>('service')
   const [editSuspended, setEditSuspended] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
 
@@ -120,6 +130,7 @@ export default function Tenants() {
     setEditId(t.id)
     setEditName(t.name)
     setEditPlan(t.plan)
+    setEditBusinessType((t.businessType ?? 'service') as LocalBusinessType)
     setEditSuspended(t.suspended ?? false)
   }
 
@@ -127,7 +138,7 @@ export default function Tenants() {
     if (!editId) return
     setEditLoading(true)
     try {
-      await updateTenant(editId, { name: editName, plan: editPlan, suspended: editSuspended })
+      await updateTenant(editId, { name: editName, plan: editPlan, businessType: editBusinessType, suspended: editSuspended })
       setEditId(null)
     } finally {
       setEditLoading(false)
@@ -188,6 +199,7 @@ export default function Tenants() {
               <TableRow>
                 <TableHead>Workspace</TableHead>
                 <TableHead>Plan</TableHead>
+                <TableHead>Business Type</TableHead>
                 <TableHead>Members</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -216,6 +228,17 @@ export default function Tenants() {
                     <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize', PLAN_COLORS[t.plan])}>
                       {t.plan}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const bt = (t.businessType ?? 'service') as LocalBusinessType
+                      const m = BUSINESS_TYPE_META[bt]
+                      return (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          {m.emoji} {m.label}
+                        </span>
+                      )
+                    })()}
                   </TableCell>
                   <TableCell>
                     <button
@@ -289,6 +312,19 @@ export default function Tenants() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label>Business Type</Label>
+                <Select value={createForm.businessType} onValueChange={(v) => setCreateForm((p) => ({ ...p, businessType: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.emoji} {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="pt-1 pb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin Account</div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -337,6 +373,19 @@ export default function Tenants() {
                     <SelectItem value="free">Free</SelectItem>
                     <SelectItem value="pro">Pro</SelectItem>
                     <SelectItem value="business">Business</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Business Type</Label>
+                <Select value={editBusinessType} onValueChange={(v) => setEditBusinessType(v as LocalBusinessType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.emoji} {o.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

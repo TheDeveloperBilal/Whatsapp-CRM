@@ -41,7 +41,7 @@ export function buildApi(broadcast) {
 
   // ── Tenant CRUD (superadmin only) ──
   r.post('/tenants', requireSuperAdmin, (req, res) => {
-    const { name, slug, plan = 'free', adminUsername, adminPassword } = req.body
+    const { name, slug, plan = 'free', businessType = 'service', adminUsername, adminPassword } = req.body
     if (!name || !slug || !adminUsername || !adminPassword)
       return res.status(400).json({ error: 'name, slug, adminUsername, adminPassword required' })
     if (collection('tenants').find((t) => t.slug === slug))
@@ -53,6 +53,7 @@ export function buildApi(broadcast) {
       name,
       slug,
       plan,
+      businessType,
       suspended: false,
       createdAt: new Date().toISOString(),
       members: [],
@@ -79,9 +80,10 @@ export function buildApi(broadcast) {
   r.patch('/tenants/:id', requireSuperAdmin, (req, res) => {
     const t = collection('tenants').find((x) => x.id === req.params.id)
     if (!t) return res.status(404).json({ error: 'not found' })
-    const { name, plan, suspended } = req.body
+    const { name, plan, businessType, suspended } = req.body
     if (name !== undefined) t.name = name
     if (plan !== undefined) t.plan = plan
+    if (businessType !== undefined) t.businessType = businessType
     if (suspended !== undefined) t.suspended = suspended
     save()
     broadcast({ type: 'tenant', tenant: t })

@@ -81,8 +81,8 @@ export interface PortalState {
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
   // tenant management (superadmin)
-  createTenant: (data: { name: string; slug: string; plan: string; adminUsername: string; adminPassword: string }) => Promise<Tenant>
-  updateTenant: (id: string, patch: { name?: string; plan?: string; suspended?: boolean }) => Promise<void>
+  createTenant: (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => Promise<Tenant>
+  updateTenant: (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => Promise<void>
   deleteTenant: (id: string) => Promise<void>
   getTenantUsers: (tenantId: string) => Promise<TenantUser[]>
   createTenantUser: (tenantId: string, data: { username: string; password: string; role?: string }) => Promise<TenantUser>
