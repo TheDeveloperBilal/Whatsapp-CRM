@@ -89,7 +89,7 @@ if (fs.existsSync(DB_FILE)) {
 }
 
 // Migrate: add missing top-level collections
-if (!db.campaigns) { db.campaigns = []; save(); console.log('[db] Migrated: added campaigns collection') }
+if (!db.campaigns) { db.campaigns = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); console.log('[db] Migrated: added campaigns collection') }
 
 // Migrate existing tenants: add businessType if missing
 if (db.tenants) {
