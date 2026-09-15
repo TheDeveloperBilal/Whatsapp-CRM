@@ -13,6 +13,7 @@ import Products from '@/pages/Products'
 import CannedResponses from '@/pages/CannedResponses'
 import Broadcast from '@/pages/Broadcast'
 import Campaigns from '@/pages/Campaigns'
+import IntentRouting from '@/pages/IntentRouting'
 import KnowledgeBase from '@/pages/KnowledgeBase'
 import Tenants from '@/pages/Tenants'
 import Settings from '@/pages/Settings'
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/canned-responses" element={<CannedResponses />} />
           <Route path="/broadcast" element={<Broadcast />} />
           <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/intent-routing" element={<IntentRouting />} />
           <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="/tenants" element={<Tenants />} />
           <Route path="/settings" element={<Settings />} />

@@ -15,6 +15,7 @@ import { waEvents, resumeSessions, sendText } from './wa.js'
 import { botReply, aiStatus } from './bot.js'
 import { buildApi } from './api.js'
 import { runAutomations } from './automations.js'
+import { runIntentRouting } from './intents.js'
 
 const PORT = process.env.PORTAL_PORT || 8787
 
@@ -118,10 +119,23 @@ waEvents.on('message', async (e) => {
   save()
   broadcast({ type: 'message', message: msg, conversation: conv, contact })
 
-  // ── Automation engine (message.received) ──
+  // ── Automation engine (message.received + message.first) + Intent routing ──
   if (!e.fromMe) {
-    runAutomations('message.received', { conv, contact, session, message: msg }, broadcast).catch(
-      (err) => console.error('automation engine:', err.message),
+    const ctx = { conv, contact, session, message: msg }
+    runAutomations('message.received', ctx, broadcast).catch(
+      (err) => console.error('[automation message.received]:', err.message),
+    )
+    // message.first: fires only when this is the first inbound message
+    const msgCount = collection('messages').filter(
+      (m) => m.conversationId === conv.id && !m.fromMe,
+    ).length
+    if (msgCount === 1) {
+      runAutomations('message.first', ctx, broadcast).catch(
+        (err) => console.error('[automation message.first]:', err.message),
+      )
+    }
+    runIntentRouting(ctx, broadcast).catch(
+      (err) => console.error('[intent routing]:', err.message),
     )
   }
 

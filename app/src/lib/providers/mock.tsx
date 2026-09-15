@@ -31,6 +31,7 @@ import type {
   BotRule,
   BotConfig,
   AutomationRule,
+  IntentRule,
   CannedResponse,
   KbArticle,
   Product,
@@ -73,6 +74,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   const [knowledgeBase, setKnowledgeBase] = useState<KbArticle[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [intents, setIntents] = useState<IntentRule[]>([])
   const botConfig = useMemo(
     () => configs.find((c) => c.tenantId === tenantId) ?? configs[0],
     [configs, tenantId],
@@ -288,6 +290,25 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   }, [])
   const deleteTenantUser = useCallback(async (_tenantId: string, _userId: string) => {}, [])
 
+  const createIntent = useCallback(async (data: Omit<IntentRule, 'id' | 'tenantId' | 'matchCount' | 'createdAt'>) => {
+    const intent: IntentRule = { ...data, id: `int${Date.now()}`, tenantId, matchCount: 0, createdAt: new Date().toISOString() }
+    setIntents((prev) => [...prev, intent])
+    return intent
+  }, [tenantId])
+
+  const updateIntent = useCallback(async (id: string, patch: Partial<IntentRule>) => {
+    setIntents((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }, [])
+
+  const deleteIntent = useCallback(async (id: string) => {
+    setIntents((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
+  const testIntent = useCallback(async (message: string): Promise<IntentRule | null> => {
+    const lower = message.toLowerCase()
+    return intents.find((i) => i.enabled && i.keywords.some((kw) => lower.includes(kw.trim().toLowerCase()))) ?? null
+  }, [intents])
+
   const value: PortalState = {
     currentUser: null,
     logout,
@@ -310,6 +331,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     knowledgeBase: knowledgeBase.filter((x) => x.tenantId === tenantId),
     products: products.filter((x) => x.tenantId === tenantId),
     campaigns: campaigns.filter((x) => x.tenantId === tenantId),
+    intents: intents.filter((x) => x.tenantId === tenantId),
     loading,
     messagesFor,
     ensureMessages,
@@ -342,6 +364,10 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     createCampaign,
     updateCampaign,
     deleteCampaign,
+    createIntent,
+    updateIntent,
+    deleteIntent,
+    testIntent,
     createTenant,
     updateTenant,
     deleteTenant,

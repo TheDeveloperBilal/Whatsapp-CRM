@@ -125,16 +125,39 @@ export interface BotConfig {
   model: string
 }
 
-// ─── Automation (foundation for the future workflow hub, option E) ───────────
+// ─── Automation ──────────────────────────────────────────────────────────────
+export interface AutomationCondition {
+  field: 'message.body' | 'contact.tags' | 'contact.phone' | 'contact.source' | 'conversation.assignee'
+  operator: 'contains' | 'not_contains' | 'equals' | 'starts_with' | 'is_empty'
+  value: string
+}
+
 export interface AutomationRule {
   id: string
   tenantId: string
   name: string
   enabled: boolean
-  trigger: string // e.g. 'message.received', 'conversation.resolved'
-  condition?: string
-  action: string // e.g. 'webhook', 'add-tag', 'assign-agent', 'n8n'
+  trigger: string
+  conditions?: AutomationCondition[]
+  conditionsMode?: 'and' | 'or'
+  condition?: string  // legacy free-text (kept for backward compat)
+  action: string
   actionTarget?: string
+}
+
+// ─── Intent Routing ──────────────────────────────────────────────────────────
+export interface IntentRule {
+  id: string
+  tenantId: string
+  name: string
+  color: string
+  keywords: string[]
+  enabled: boolean
+  action: 'add-tag' | 'assign-agent' | 'send-message' | 'webhook' | 'none'
+  actionTarget?: string
+  priority: number
+  matchCount: number
+  createdAt: string
 }
 
 // ─── Canned Responses ────────────────────────────────────────────────────────

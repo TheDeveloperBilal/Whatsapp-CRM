@@ -12,6 +12,7 @@ import type {
   BotRule,
   BotConfig,
   AutomationRule,
+  IntentRule,
   CannedResponse,
   KbArticle,
   Product,
@@ -48,6 +49,7 @@ export interface PortalState {
   knowledgeBase: KbArticle[]
   products: Product[]
   campaigns: Campaign[]
+  intents: IntentRule[]
   loading: boolean
   // actions
   messagesFor: (conversationId: string) => Message[]
@@ -86,6 +88,11 @@ export interface PortalState {
   createCampaign: (data: Omit<Campaign, 'id' | 'tenantId' | 'leads' | 'createdAt'>) => Promise<Campaign>
   updateCampaign: (id: string, patch: Partial<Campaign>) => Promise<void>
   deleteCampaign: (id: string) => Promise<void>
+  // intents
+  createIntent: (data: Omit<IntentRule, 'id' | 'tenantId' | 'matchCount' | 'createdAt'>) => Promise<IntentRule>
+  updateIntent: (id: string, patch: Partial<IntentRule>) => Promise<void>
+  deleteIntent: (id: string) => Promise<void>
+  testIntent: (message: string) => Promise<IntentRule | null>
   // tenant management (superadmin)
   createTenant: (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => Promise<Tenant>
   updateTenant: (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => Promise<void>

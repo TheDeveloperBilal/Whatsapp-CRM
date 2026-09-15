@@ -28,6 +28,7 @@ import type {
   BotRule,
   BotConfig,
   AutomationRule,
+  IntentRule,
   CannedResponse,
   KbArticle,
   Product,
@@ -87,7 +88,9 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   const [knowledgeBase, setKnowledgeBase] = useState<KbArticle[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [intents, setIntents] = useState<IntentRule[]>([])
   const [msgCache, setMsgCache] = useState<Record<string, Message[]>>({})
+
   const [loading, setLoading] = useState(true)
   const tenantRef = useRef(tenant?.id)
   tenantRef.current = tenant?.id
@@ -135,6 +138,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         setKnowledgeBase(b.knowledgeBase ?? [])
         setProducts(b.products ?? [])
         setCampaigns(b.campaigns ?? [])
+        setIntents(b.intents ?? [])
         setStats(b.stats)
         setMsgCache({})
         setBackendOnline(true)
@@ -307,6 +311,17 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         }
         case 'campaign.deleted':
           setCampaigns((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'intent': {
+          const intent = e.intent as IntentRule
+          setIntents((prev) => {
+            const exists = prev.some((x) => x.id === intent.id)
+            return exists ? prev.map((x) => (x.id === intent.id ? intent : x)) : [...prev, intent]
+          })
+          break
+        }
+        case 'intent.deleted':
+          setIntents((prev) => prev.filter((x) => x.id !== e.id))
           break
       }
     })
@@ -587,6 +602,41 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     [client],
   )
 
+  const createIntent = useCallback(
+    async (data: Omit<IntentRule, 'id' | 'tenantId' | 'matchCount' | 'createdAt'>) => {
+      if (!tenant) throw new Error('no tenant')
+      const created = await client.createIntent(tenant.id, data)
+      setIntents((prev) => [...prev, created])
+      return created
+    },
+    [client, tenant],
+  )
+
+  const updateIntent = useCallback(
+    async (id: string, patch: Partial<IntentRule>) => {
+      const updated = await client.updateIntent(id, patch)
+      setIntents((prev) => prev.map((x) => (x.id === id ? updated : x)))
+    },
+    [client],
+  )
+
+  const deleteIntent = useCallback(
+    async (id: string) => {
+      setIntents((prev) => prev.filter((x) => x.id !== id))
+      await client.deleteIntent(id).catch(() => {})
+    },
+    [client],
+  )
+
+  const testIntent = useCallback(
+    async (message: string) => {
+      if (!tenant) return null
+      const result = await client.testIntent(tenant.id, message)
+      return result.matched
+    },
+    [client, tenant],
+  )
+
   const logout = useCallback(() => {
     clearToken()
     window.location.href = '/'
@@ -687,6 +737,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     knowledgeBase,
     products,
     campaigns,
+    intents,
     loading,
     messagesFor,
     ensureMessages,
@@ -719,6 +770,10 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     createCampaign,
     updateCampaign,
     deleteCampaign,
+    createIntent,
+    updateIntent,
+    deleteIntent,
+    testIntent,
     createTenant,
     updateTenant,
     deleteTenant,

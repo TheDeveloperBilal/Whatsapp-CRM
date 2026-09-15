@@ -14,6 +14,7 @@ import type {
   BotRule,
   BotConfig,
   AutomationRule,
+  IntentRule,
   CannedResponse,
   KbArticle,
   Product,
@@ -35,6 +36,7 @@ export interface Bootstrap {
   knowledgeBase: KbArticle[]
   products: Product[]
   campaigns: Campaign[]
+  intents: IntentRule[]
   stats: DashboardStats
 }
 
@@ -62,6 +64,8 @@ export type ServerEvent =
   | { type: 'tenant.deleted'; tenantId: string }
   | { type: 'campaign'; campaign: Campaign }
   | { type: 'campaign.deleted'; id: string }
+  | { type: 'intent'; intent: IntentRule }
+  | { type: 'intent.deleted'; id: string }
 
 export interface TenantUser {
   id: string
@@ -276,6 +280,32 @@ export class PortalClient {
   }
   deleteCampaign(id: string) {
     return this.req<{ ok: boolean }>(`/campaigns/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Intents ──
+  listIntents(tenantId: string) {
+    return this.req<IntentRule[]>(`/tenants/${tenantId}/intents`)
+  }
+  createIntent(tenantId: string, data: Omit<IntentRule, 'id' | 'tenantId' | 'matchCount' | 'createdAt'>) {
+    return this.req<IntentRule>(`/tenants/${tenantId}/intents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+  updateIntent(id: string, patch: Partial<IntentRule>) {
+    return this.req<IntentRule>(`/intents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deleteIntent(id: string) {
+    return this.req<{ ok: boolean }>(`/intents/${id}`, { method: 'DELETE' })
+  }
+  testIntent(tenantId: string, message: string) {
+    return this.req<{ matched: IntentRule | null }>(`/intents/test`, {
+      method: 'POST',
+      body: JSON.stringify({ tenantId, message }),
+    })
   }
 
   // ── Broadcast ──

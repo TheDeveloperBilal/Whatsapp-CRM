@@ -4,6 +4,7 @@ import { collection, upsert, remove, uid, save } from './db.js'
 import { startSession, stopSession, sendText } from './wa.js'
 import { aiStatus } from './bot.js'
 import { runAutomations } from './automations.js'
+import { runIntentRouting } from './intents.js'
 import {
   checkPassword,
   hashPassword,
@@ -164,6 +165,7 @@ export function buildApi(broadcast) {
       knowledgeBase: collection('knowledgeBase').filter((a) => a.tenantId === tid),
       products: collection('products').filter((p) => p.tenantId === tid),
       campaigns: collection('campaigns').filter((c) => c.tenantId === tid),
+      intents: collection('intents').filter((i) => i.tenantId === tid),
       stats,
     })
   })
@@ -224,9 +226,21 @@ export function buildApi(broadcast) {
   r.patch('/contacts/:id', (req, res) => {
     const c = collection('contacts').find((x) => x.id === req.params.id)
     if (!c) return res.status(404).json({ error: 'not found' })
+    const prevTags = [...(c.tags || [])]
     Object.assign(c, req.body) // notes / tags / name
     save()
     broadcast({ type: 'contact', contact: c })
+    // fire tag.added automation when new tags were added
+    const newTags = (c.tags || []).filter((t) => !prevTags.includes(t))
+    if (newTags.length) {
+      const conv = collection('conversations').find((cv) => cv.contactId === c.id && cv.status === 'open')
+      if (conv) {
+        const session = collection('sessions').find((s) => s.id === conv.sessionId)
+        runAutomations('tag.added', { conv, contact: c, session, message: null }, broadcast).catch(
+          (e) => console.error('[automation tag.added]', e.message),
+        )
+      }
+    }
     res.json(c)
   })
 
@@ -453,6 +467,77 @@ export function buildApi(broadcast) {
     save()
     broadcast({ type: 'campaign.deleted', id: req.params.id })
     res.json({ ok: true })
+  })
+
+  // ── Intent Routing ──
+  r.get('/tenants/:tid/intents', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json(collection('intents').filter((i) => i.tenantId === req.params.tid))
+  })
+
+  r.post('/tenants/:tid/intents', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { name, color = '#6366f1', keywords = [], action = 'none', actionTarget, priority = 0 } = req.body
+    if (!name) return res.status(400).json({ error: 'name required' })
+    const intent = {
+      id: uid('int'),
+      tenantId: req.params.tid,
+      name,
+      color,
+      keywords: Array.isArray(keywords) ? keywords : keywords.split(',').map((k) => k.trim()).filter(Boolean),
+      enabled: true,
+      action,
+      actionTarget: actionTarget || '',
+      priority,
+      matchCount: 0,
+      createdAt: new Date().toISOString(),
+    }
+    upsert('intents', intent)
+    save()
+    broadcast({ type: 'intent', intent })
+    res.json(intent)
+  })
+
+  r.patch('/intents/:id', (req, res) => {
+    const intent = collection('intents').find((x) => x.id === req.params.id)
+    if (!intent) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, intent.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { name, color, keywords, enabled, action, actionTarget, priority } = req.body
+    if (name !== undefined) intent.name = name
+    if (color !== undefined) intent.color = color
+    if (keywords !== undefined) intent.keywords = Array.isArray(keywords) ? keywords : keywords.split(',').map((k) => k.trim()).filter(Boolean)
+    if (enabled !== undefined) intent.enabled = enabled
+    if (action !== undefined) intent.action = action
+    if (actionTarget !== undefined) intent.actionTarget = actionTarget
+    if (priority !== undefined) intent.priority = priority
+    save()
+    broadcast({ type: 'intent', intent })
+    res.json(intent)
+  })
+
+  r.delete('/intents/:id', (req, res) => {
+    const intent = collection('intents').find((x) => x.id === req.params.id)
+    if (!intent) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, intent.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('intents', (x) => x.id === req.params.id)
+    save()
+    broadcast({ type: 'intent.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // Test intent matching (POST body: { message, tenantId })
+  r.post('/intents/test', (req, res) => {
+    const { message, tenantId } = req.body
+    if (!message || !tenantId) return res.status(400).json({ error: 'message and tenantId required' })
+    if (!canAccessTenant(req.user, tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const intents = collection('intents')
+      .filter((i) => i.tenantId === tenantId && i.enabled)
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+    const lower = message.toLowerCase()
+    const matched = intents.find((i) =>
+      i.keywords?.some((kw) => kw && lower.includes(kw.trim().toLowerCase()))
+    )
+    res.json({ matched: matched ?? null })
   })
 
   // ── Meta Lead Ads webhook (public — no auth, verified by hub.verify.token) ──
