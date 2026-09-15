@@ -77,6 +77,7 @@ const seed = () => ({
     },
   ],
   automations: [],
+  campaigns: [],
 })
 
 let db
@@ -86,6 +87,9 @@ if (fs.existsSync(DB_FILE)) {
   db = seed()
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2))
 }
+
+// Migrate: add missing top-level collections
+if (!db.campaigns) { db.campaigns = []; save(); console.log('[db] Migrated: added campaigns collection') }
 
 // Migrate existing tenants: add businessType if missing
 if (db.tenants) {

@@ -15,6 +15,7 @@ import type {
   CannedResponse,
   KbArticle,
   Product,
+  Campaign,
   GatewayProfile,
   DashboardStats,
   ConversationStatus,
@@ -46,6 +47,7 @@ export interface PortalState {
   cannedResponses: CannedResponse[]
   knowledgeBase: KbArticle[]
   products: Product[]
+  campaigns: Campaign[]
   loading: boolean
   // actions
   messagesFor: (conversationId: string) => Message[]
@@ -80,6 +82,10 @@ export interface PortalState {
   saveProduct: (product: Omit<Product, 'id' | 'tenantId'>) => Promise<void>
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
+  // campaigns
+  createCampaign: (data: Omit<Campaign, 'id' | 'tenantId' | 'leads' | 'createdAt'>) => Promise<Campaign>
+  updateCampaign: (id: string, patch: Partial<Campaign>) => Promise<void>
+  deleteCampaign: (id: string) => Promise<void>
   // tenant management (superadmin)
   createTenant: (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => Promise<Tenant>
   updateTenant: (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => Promise<void>

@@ -31,6 +31,7 @@ import type {
   CannedResponse,
   KbArticle,
   Product,
+  Campaign,
   GatewayProfile,
   DashboardStats,
   ConversationStatus,
@@ -85,6 +86,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([])
   const [knowledgeBase, setKnowledgeBase] = useState<KbArticle[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [msgCache, setMsgCache] = useState<Record<string, Message[]>>({})
   const [loading, setLoading] = useState(true)
   const tenantRef = useRef(tenant?.id)
@@ -132,6 +134,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         setCannedResponses(b.cannedResponses ?? [])
         setKnowledgeBase(b.knowledgeBase ?? [])
         setProducts(b.products ?? [])
+        setCampaigns(b.campaigns ?? [])
         setStats(b.stats)
         setMsgCache({})
         setBackendOnline(true)
@@ -293,6 +296,17 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         }
         case 'tenant.deleted':
           setTenants((prev) => prev.filter((t) => t.id !== e.tenantId))
+          break
+        case 'campaign': {
+          const camp = e.campaign as Campaign
+          setCampaigns((prev) => {
+            const exists = prev.some((x) => x.id === camp.id)
+            return exists ? prev.map((x) => (x.id === camp.id ? camp : x)) : [...prev, camp]
+          })
+          break
+        }
+        case 'campaign.deleted':
+          setCampaigns((prev) => prev.filter((x) => x.id !== e.id))
           break
       }
     })
@@ -547,6 +561,32 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     [client],
   )
 
+  const createCampaign = useCallback(
+    async (data: Omit<Campaign, 'id' | 'tenantId' | 'leads' | 'createdAt'>) => {
+      if (!tenant) throw new Error('no tenant')
+      const created = await client.createCampaign(tenant.id, data)
+      setCampaigns((prev) => [...prev, created])
+      return created
+    },
+    [client, tenant],
+  )
+
+  const updateCampaign = useCallback(
+    async (id: string, patch: Partial<Campaign>) => {
+      const updated = await client.updateCampaign(id, patch)
+      setCampaigns((prev) => prev.map((x) => (x.id === id ? updated : x)))
+    },
+    [client],
+  )
+
+  const deleteCampaign = useCallback(
+    async (id: string) => {
+      setCampaigns((prev) => prev.filter((x) => x.id !== id))
+      await client.deleteCampaign(id).catch(() => {})
+    },
+    [client],
+  )
+
   const logout = useCallback(() => {
     clearToken()
     window.location.href = '/'
@@ -646,6 +686,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     cannedResponses,
     knowledgeBase,
     products,
+    campaigns,
     loading,
     messagesFor,
     ensureMessages,
@@ -675,6 +716,9 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     saveProduct,
     updateProduct,
     deleteProduct,
+    createCampaign,
+    updateCampaign,
+    deleteCampaign,
     createTenant,
     updateTenant,
     deleteTenant,

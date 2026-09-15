@@ -19,6 +19,7 @@ import {
   UserCircle,
   Wrench,
   MonitorSmartphone,
+  Flame,
 } from 'lucide-react'
 import type { BusinessType } from '@/types/portal'
 import { BUSINESS_TYPE_META } from '@/types/portal'
@@ -63,6 +64,7 @@ function getNav(businessType: BusinessType) {
       label: meta.productLabel,
       icon: businessType === 'service' ? Wrench : businessType === 'digital' ? MonitorSmartphone : Package,
     },
+    { to: '/campaigns', label: 'Campaigns', icon: Flame },
     { to: '/canned-responses', label: 'Canned Responses', icon: MessageSquareDashed },
     { to: '/broadcast', label: 'Broadcast', icon: Megaphone },
     { to: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
@@ -79,6 +81,7 @@ const titles: Record<string, string> = {
   '/sessions': 'WhatsApp Sessions',
   '/automation': 'Automation Rules',
   '/products': 'Product Catalog',
+  '/campaigns': 'Lead Capture & Campaigns',
   '/canned-responses': 'Canned Responses',
   '/broadcast': 'Broadcast Message',
   '/knowledge-base': 'Knowledge Base',

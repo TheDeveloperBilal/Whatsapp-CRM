@@ -163,6 +163,7 @@ export function buildApi(broadcast) {
       cannedResponses: collection('cannedResponses').filter((cr) => cr.tenantId === tid),
       knowledgeBase: collection('knowledgeBase').filter((a) => a.tenantId === tid),
       products: collection('products').filter((p) => p.tenantId === tid),
+      campaigns: collection('campaigns').filter((c) => c.tenantId === tid),
       stats,
     })
   })
@@ -398,6 +399,121 @@ export function buildApi(broadcast) {
     save()
     broadcast({ type: 'product.deleted', id: req.params.id })
     res.json({ ok: true })
+  })
+
+  // ── Campaigns ──
+  r.get('/tenants/:tid/campaigns', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json(collection('campaigns').filter((c) => c.tenantId === req.params.tid))
+  })
+
+  r.post('/tenants/:tid/campaigns', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { name, type = 'organic', phone, welcomeMessage, trackingCode } = req.body
+    if (!name || !phone) return res.status(400).json({ error: 'name and phone required' })
+    const campaign = {
+      id: uid('camp'),
+      tenantId: req.params.tid,
+      name,
+      type,
+      phone: phone.replace(/\D/g, ''),
+      welcomeMessage: welcomeMessage || '',
+      trackingCode: trackingCode || uid('ref'),
+      active: true,
+      leads: 0,
+      createdAt: new Date().toISOString(),
+    }
+    upsert('campaigns', campaign)
+    save()
+    broadcast({ type: 'campaign', campaign })
+    res.json(campaign)
+  })
+
+  r.patch('/campaigns/:id', (req, res) => {
+    const c = collection('campaigns').find((x) => x.id === req.params.id)
+    if (!c) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, c.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { name, type, phone, welcomeMessage, trackingCode, active } = req.body
+    if (name !== undefined) c.name = name
+    if (type !== undefined) c.type = type
+    if (phone !== undefined) c.phone = phone.replace(/\D/g, '')
+    if (welcomeMessage !== undefined) c.welcomeMessage = welcomeMessage
+    if (trackingCode !== undefined) c.trackingCode = trackingCode
+    if (active !== undefined) c.active = active
+    save()
+    broadcast({ type: 'campaign', campaign: c })
+    res.json(c)
+  })
+
+  r.delete('/campaigns/:id', (req, res) => {
+    const c = collection('campaigns').find((x) => x.id === req.params.id)
+    if (!c) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, c.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('campaigns', (x) => x.id === req.params.id)
+    save()
+    broadcast({ type: 'campaign.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // ── Meta Lead Ads webhook (public — no auth, verified by hub.verify.token) ──
+  r.get('/webhooks/meta', (req, res) => {
+    const mode = req.query['hub.mode']
+    const token = req.query['hub.verify_token']
+    const challenge = req.query['hub.challenge']
+    const expected = process.env.META_WEBHOOK_VERIFY_TOKEN || 'whatsapp-crm-verify'
+    if (mode === 'subscribe' && token === expected) {
+      res.status(200).send(challenge)
+    } else {
+      res.status(403).json({ error: 'verification failed' })
+    }
+  })
+
+  r.post('/webhooks/meta', (req, res) => {
+    res.sendStatus(200) // acknowledge immediately
+    try {
+      const body = req.body
+      if (body.object !== 'page' && body.object !== 'ad_leadgen') return
+      for (const entry of body.entry || []) {
+        for (const change of entry.changes || []) {
+          if (change.field !== 'leadgen') continue
+          const leadData = change.value || {}
+          const formId = leadData.form_id || ''
+          // find campaign by trackingCode = formId or just use first active campaign
+          const campaigns = collection('campaigns')
+          const campaign = campaigns.find((c) => c.trackingCode === formId) || campaigns[0]
+          if (!campaign) continue
+          // build contact
+          const fieldData = leadData.field_data || []
+          const get = (n) => (fieldData.find((f) => f.name === n)?.values || [])[0] || ''
+          const phone = get('phone_number') || get('phone') || `meta-${leadData.leadgen_id}`
+          const name = [get('first_name'), get('last_name')].filter(Boolean).join(' ') || get('full_name') || 'Meta Lead'
+          const chatId = phone.replace(/\D/g, '') + '@c.us'
+          const existing = collection('contacts').find((c) => c.chatId === chatId && c.tenantId === campaign.tenantId)
+          if (!existing) {
+            const contact = {
+              id: uid('c'),
+              tenantId: campaign.tenantId,
+              name,
+              phone: phone.replace(/\D/g, ''),
+              chatId,
+              avatarHue: Math.floor(Math.random() * 360),
+              tags: [],
+              notes: get('email') ? `Email: ${get('email')}` : '',
+              optedIn: true,
+              source: 'meta_ads',
+              campaignId: campaign.id,
+              createdAt: new Date().toISOString(),
+            }
+            collection('contacts').push(contact)
+            campaign.leads = (campaign.leads || 0) + 1
+            save()
+            broadcast({ type: 'contact', contact })
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[meta webhook]', e)
+    }
   })
 
   // ── Broadcast ──

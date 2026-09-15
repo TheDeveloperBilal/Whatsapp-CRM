@@ -17,6 +17,7 @@ import type {
   CannedResponse,
   KbArticle,
   Product,
+  Campaign,
   AuthUser,
   DashboardStats,
 } from '@/types/portal'
@@ -33,6 +34,7 @@ export interface Bootstrap {
   cannedResponses: CannedResponse[]
   knowledgeBase: KbArticle[]
   products: Product[]
+  campaigns: Campaign[]
   stats: DashboardStats
 }
 
@@ -58,6 +60,8 @@ export type ServerEvent =
   | { type: 'human.requested'; conversation: Conversation; contact: Contact }
   | { type: 'tenant'; tenant: Tenant }
   | { type: 'tenant.deleted'; tenantId: string }
+  | { type: 'campaign'; campaign: Campaign }
+  | { type: 'campaign.deleted'; id: string }
 
 export interface TenantUser {
   id: string
@@ -252,6 +256,26 @@ export class PortalClient {
   }
   deleteTenantUser(tenantId: string, userId: string) {
     return this.req<{ ok: boolean }>(`/tenants/${tenantId}/users/${userId}`, { method: 'DELETE' })
+  }
+
+  // ── Campaigns ──
+  listCampaigns(tenantId: string) {
+    return this.req<Campaign[]>(`/tenants/${tenantId}/campaigns`)
+  }
+  createCampaign(tenantId: string, data: Omit<Campaign, 'id' | 'tenantId' | 'leads' | 'createdAt'>) {
+    return this.req<Campaign>(`/tenants/${tenantId}/campaigns`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+  updateCampaign(id: string, patch: Partial<Campaign>) {
+    return this.req<Campaign>(`/campaigns/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deleteCampaign(id: string) {
+    return this.req<{ ok: boolean }>(`/campaigns/${id}`, { method: 'DELETE' })
   }
 
   // ── Broadcast ──

@@ -34,6 +34,7 @@ import type {
   CannedResponse,
   KbArticle,
   Product,
+  Campaign,
   GatewayProfile,
   DashboardStats,
   ConversationStatus,
@@ -71,6 +72,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([])
   const [knowledgeBase, setKnowledgeBase] = useState<KbArticle[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const botConfig = useMemo(
     () => configs.find((c) => c.tenantId === tenantId) ?? configs[0],
     [configs, tenantId],
@@ -264,6 +266,20 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     return t
   }, [])
 
+  const createCampaign = useCallback(async (data: Omit<Campaign, 'id' | 'tenantId' | 'leads' | 'createdAt'>) => {
+    const c: Campaign = { ...data, id: `camp${Date.now()}`, tenantId, leads: 0, createdAt: new Date().toISOString() }
+    setCampaigns((prev) => [...prev, c])
+    return c
+  }, [tenantId])
+
+  const updateCampaign = useCallback(async (id: string, patch: Partial<Campaign>) => {
+    setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+  }, [])
+
+  const deleteCampaign = useCallback(async (id: string) => {
+    setCampaigns((prev) => prev.filter((c) => c.id !== id))
+  }, [])
+
   const updateTenant = useCallback(async (_id: string, _patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => {}, [])
   const deleteTenant = useCallback(async (_id: string) => {}, [])
   const getTenantUsers = useCallback(async (_tenantId: string): Promise<TenantUser[]> => [], [])
@@ -293,6 +309,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     cannedResponses: cannedResponses.filter((x) => x.tenantId === tenantId),
     knowledgeBase: knowledgeBase.filter((x) => x.tenantId === tenantId),
     products: products.filter((x) => x.tenantId === tenantId),
+    campaigns: campaigns.filter((x) => x.tenantId === tenantId),
     loading,
     messagesFor,
     ensureMessages,
@@ -322,6 +339,9 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     saveProduct,
     updateProduct,
     deleteProduct,
+    createCampaign,
+    updateCampaign,
+    deleteCampaign,
     createTenant,
     updateTenant,
     deleteTenant,

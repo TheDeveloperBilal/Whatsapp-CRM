@@ -72,6 +72,8 @@ export interface Contact {
   notes: string
   lastMessageAt?: string
   optedIn: boolean
+  source?: string       // e.g. 'direct', 'meta_ads', 'qr', campaign tracking code
+  campaignId?: string   // campaign that brought this contact in
 }
 
 export interface Message {
@@ -180,6 +182,22 @@ export interface Product {
   pricingModel?: 'fixed' | 'hourly' | 'quote'
   availability?: string  // e.g. "Mon–Fri, 9am–6pm"
   active: boolean
+}
+
+// ─── Lead Capture Campaigns ──────────────────────────────────────────────────
+export type CampaignType = 'organic' | 'meta_ads' | 'qr' | 'referral'
+
+export interface Campaign {
+  id: string
+  tenantId: string
+  name: string
+  type: CampaignType
+  phone: string           // WhatsApp number digits only (e.g. 971501234567)
+  welcomeMessage: string  // pre-filled message for wa.me link
+  trackingCode: string    // unique short code embedded in welcome message
+  active: boolean
+  leads: number           // contacts attributed to this campaign
+  createdAt: string
 }
 
 // ─── Gateway connection profile (per tenant) ─────────────────────────────────
