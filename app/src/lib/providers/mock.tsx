@@ -414,7 +414,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   }, [tenantId, paymentGateways])
 
   const updatePaymentLink = useCallback(async (id: string, patch: { status?: string; paidAt?: string }) => {
-    setPaymentLinks((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+    setPaymentLinks((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } as PaymentLink : x)))
   }, [])
 
   const sendPaymentLink = useCallback(async (_id: string, _message?: string) => {
@@ -430,7 +430,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   }, [tenantId])
 
   const updateInvoice = useCallback(async (id: string, patch: { status?: string; paidAt?: string; notes?: string; dueDate?: string }) => {
-    setInvoices((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+    setInvoices((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } as Invoice : x)))
   }, [])
 
   const deleteInvoice = useCallback(async (id: string) => {

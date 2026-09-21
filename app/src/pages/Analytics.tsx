@@ -82,7 +82,7 @@ export default function Analytics() {
     // Conversations
     const totalConvs = conversations.length
     const openConvs = conversations.filter((c) => c.status === 'open').length
-    const botHandled = conversations.filter((c) => c.botActive).length
+    const botHandled = conversations.filter((c) => (c as any).botActive).length
     const humanHandled = totalConvs - botHandled
 
     // Contacts by source (using tag as proxy)

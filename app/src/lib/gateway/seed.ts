@@ -20,6 +20,7 @@ export const tenants: Tenant[] = [
     name: 'Acme Retail',
     slug: 'acme',
     plan: 'business',
+    businessType: 'retail',
     createdAt: min(60 * 24 * 90),
     members: [
       { id: 'u1', name: 'You', email: 'you@acme.io', role: 'owner', online: true },
@@ -33,6 +34,7 @@ export const tenants: Tenant[] = [
     name: 'Klinik Sehat',
     slug: 'klinik',
     plan: 'pro',
+    businessType: 'service',
     createdAt: min(60 * 24 * 30),
     members: [
       { id: 'u1', name: 'You', email: 'you@acme.io', role: 'admin', online: true },

@@ -3,7 +3,7 @@ import QRCode from 'qrcode'
 import {
   Plus, Pencil, Trash2, Copy, QrCode, ExternalLink,
   Loader2, CheckCircle2, AlertTriangle, Flame, Megaphone,
-  Scan, Users, TrendingUp, ToggleLeft, ToggleRight,
+  Users, TrendingUp, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { usePortal } from '@/lib/store'
 import type { Campaign, CampaignType } from '@/types/portal'

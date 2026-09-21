@@ -84,6 +84,7 @@ export class MockAdapter implements WhatsAppGateway {
       avgFirstResponseMin: 1.8,
       activeSessions: sess.filter((s) => s.status === 'connected').length,
       botHandledPct: msgs.length ? Math.round((botMsgs / msgs.length) * 100) : 0,
+      volume7d: msgs.length,
     }
   }
 
