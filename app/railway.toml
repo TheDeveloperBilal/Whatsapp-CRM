@@ -1,5 +1,6 @@
 [build]
 builder = "nixpacks"
+buildCommand = "npm ci --omit=dev --ignore-scripts"
 
 [deploy]
 startCommand = "node server/src/index.js"
