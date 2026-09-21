@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Search, UserCheck, UserX } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -36,7 +36,7 @@ export default function Contacts() {
   }, [contacts, q])
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 sm:p-6 space-y-4">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Contacts</h2>
@@ -55,7 +55,7 @@ export default function Contacts() {
         </div>
       </div>
 
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -152,3 +152,4 @@ export default function Contacts() {
     </div>
   )
 }
+

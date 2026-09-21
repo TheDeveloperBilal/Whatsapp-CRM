@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { Megaphone, Send, Search, CheckSquare, Square } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -61,7 +61,7 @@ export default function Broadcast() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-4xl">
       <div>
         <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Megaphone className="size-6" /> Broadcast Message
@@ -169,3 +169,4 @@ export default function Broadcast() {
     </div>
   )
 }
+

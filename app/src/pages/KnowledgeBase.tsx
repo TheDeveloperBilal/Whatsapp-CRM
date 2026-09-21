@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { BookOpen, Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { usePortal } from '@/lib/store'
 
 type ArticleLocal = { title: string; category: string; content: string }
 const blank = (): ArticleLocal => ({ title: '', category: '', content: '' })
+const articleBody = (a: { body?: string; content?: string }) => a.body || a.content || ''
 
 export default function KnowledgeBase() {
   const { knowledgeBase, saveKbArticle, updateKbArticle, deleteKbArticle } = usePortal()
@@ -24,7 +25,7 @@ export default function KnowledgeBase() {
     if (!form.title.trim() || !form.content.trim()) return
     setSaving(true)
     try {
-      await saveKbArticle({ ...form, category: form.category || 'General' })
+      await saveKbArticle({ title: form.title, category: form.category || 'General', body: form.content })
       setForm(blank())
       setShowNew(false)
     } finally {
@@ -32,9 +33,9 @@ export default function KnowledgeBase() {
     }
   }
 
-  const startEdit = (a: { id: string; title: string; category: string; content: string }) => {
+  const startEdit = (a: { id: string; title: string; category: string; body?: string; content?: string }) => {
     setEditId(a.id)
-    setEditForm({ title: a.title, category: a.category, content: a.content })
+    setEditForm({ title: a.title, category: a.category, content: articleBody(a) })
     setExpanded(null)
   }
 
@@ -42,7 +43,7 @@ export default function KnowledgeBase() {
     if (!editId) return
     setSaving(true)
     try {
-      await updateKbArticle(editId, editForm)
+      await updateKbArticle(editId, { title: editForm.title, category: editForm.category, body: editForm.content })
       setEditId(null)
     } finally {
       setSaving(false)
@@ -52,7 +53,7 @@ export default function KnowledgeBase() {
   const categories = [...new Set(knowledgeBase.map((a) => a.category))].sort()
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-3xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -114,9 +115,9 @@ export default function KnowledgeBase() {
                           {a.title}
                         </button>
                         {expanded === a.id ? (
-                          <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{a.content}</p>
+                          <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{articleBody(a)}</p>
                         ) : (
-                          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{a.content}</p>
+                          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{articleBody(a)}</p>
                         )}
                       </div>
                       <div className="flex gap-1 shrink-0">
@@ -200,3 +201,4 @@ export default function KnowledgeBase() {
     </div>
   )
 }
+

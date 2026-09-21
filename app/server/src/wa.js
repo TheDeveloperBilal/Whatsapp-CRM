@@ -14,8 +14,9 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers,
   jidNormalizedUser,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys'
-import { AUTH_DIR, collection, upsert, save } from './db.js'
+import { AUTH_DIR, MEDIA_DIR, collection, upsert, save } from './db.js'
 
 const logger = pino({ level: 'warn' })
 
@@ -106,13 +107,32 @@ export async function startSession(sessionId) {
     }
   })
 
-  sock.ev.on('messages.upsert', ({ messages, type }) => {
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' && type !== 'append') return
     for (const m of messages) {
       const jid = m.key.remoteJid
       if (!jid || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue
       const text = extractText(m)
       if (!text) continue
+
+      let mediaUrl = null
+      const mContent = m.message || {}
+      if (mContent.audioMessage) {
+        try {
+          const buffer = await downloadMediaMessage(m, 'buffer', {}, {
+            logger,
+            reuploadRequest: sock.updateMediaMessage,
+          })
+          const mime = mContent.audioMessage.mimetype || ''
+          const ext = mime.includes('mp4') ? 'mp4' : 'ogg'
+          const filePath = `${MEDIA_DIR}/${m.key.id}.${ext}`
+          fs.writeFileSync(filePath, buffer)
+          mediaUrl = `/api/media/${m.key.id}`
+        } catch (e) {
+          console.error('[audio download]', e.message)
+        }
+      }
+
       waEvents.emit('message', {
         sessionId,
         jid: jidNormalizedUser(jid),
@@ -121,6 +141,7 @@ export async function startSession(sessionId) {
         pushName: m.pushName,
         text,
         type: msgType(m),
+        mediaUrl,
         timestamp: new Date(Number(m.messageTimestamp) * 1000).toISOString(),
       })
     }

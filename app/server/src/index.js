@@ -16,20 +16,72 @@ import { botReply, aiStatus } from './bot.js'
 import { buildApi } from './api.js'
 import { runAutomations } from './automations.js'
 import { runIntentRouting } from './intents.js'
+import { verifyToken } from './auth.js'
 
-const PORT = process.env.PORTAL_PORT || 8787
+const PORT = process.env.PORT || process.env.PORTAL_PORT || 8787
+
+// ── Security headers ──────────────────────────────────────────────────────────
+function securityHeaders(_req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-XSS-Protection', '0')  // modern browsers rely on CSP, not this
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  next()
+}
+
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:5173').split(',').map(s => s.trim())
 
 const app = express()
-app.use(cors())
+app.use(cors({
+  origin: (origin, cb) => {
+    // allow requests with no origin (curl, Postman, same-origin)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true)
+    cb(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
+app.use(securityHeaders)
 app.use(express.json({ limit: '2mb' }))
 
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
 
+// Authenticate each WS connection and tag it with the tenant
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, 'http://localhost')
+  const token = url.searchParams.get('token')
+  const payload = verifyToken(token)
+  if (!payload) {
+    ws.close(4401, 'unauthorized')
+    return
+  }
+  ws._tenantId = payload.tenantId
+  ws._role = payload.role
+})
+
+// Extract the tenantId embedded in an event payload (best-effort)
+function eventTenantId(event) {
+  return (
+    event.tenantId ??
+    event.contact?.tenantId ??
+    event.conversation?.tenantId ??
+    event.session?.tenantId ??
+    event.message?.tenantId ??
+    null
+  )
+}
+
 function broadcast(event) {
+  const tid = eventTenantId(event)
   const data = JSON.stringify(event)
   for (const client of wss.clients) {
-    if (client.readyState === 1) client.send(data)
+    if (client.readyState !== 1) continue
+    // superadmins receive everything; tenant clients only get their own events
+    if (client._role === 'superadmin' || !tid || client._tenantId === tid) {
+      client.send(data)
+    }
   }
 }
 
@@ -66,6 +118,11 @@ function conversationFor(session, jid, pushName) {
     }
     upsert('contacts', contact)
     broadcast({ type: 'contact', contact })
+    // fire contact.created automation for new contacts
+    const session = collection('sessions').find((s) => s.tenantId === tenantId)
+    runAutomations('contact.created', { conv: null, contact, session, message: null }, broadcast).catch(
+      (err) => console.error('[automation contact.created]:', err.message),
+    )
   } else if (pushName && contact.name !== pushName && contact.name.startsWith('+')) {
     contact.name = pushName
     upsert('contacts', contact)
@@ -107,6 +164,7 @@ waEvents.on('message', async (e) => {
     senderName: e.pushName,
     body: e.text,
     type: e.type,
+    mediaUrl: e.mediaUrl ?? null,
     status: e.fromMe ? 'sent' : 'delivered',
     byBot: false,
     timestamp: e.timestamp,
@@ -146,6 +204,11 @@ waEvents.on('message', async (e) => {
         .filter((m) => m.conversationId === conv.id)
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
       const result = await botReply(conv.tenantId, conv, history, e.text)
+
+      if (result) {
+        // Human-like typing delay: 2–6 s random, so replies don't look instant/robotic
+        await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 4000))
+      }
 
       if (result && typeof result === 'object' && result.handoff) {
         // ── Human handoff ──

@@ -14,9 +14,14 @@ import CannedResponses from '@/pages/CannedResponses'
 import Broadcast from '@/pages/Broadcast'
 import Campaigns from '@/pages/Campaigns'
 import IntentRouting from '@/pages/IntentRouting'
+import Pipeline from '@/pages/Pipeline'
+import Booking from '@/pages/Booking'
+import Payments from '@/pages/Payments'
+import Analytics from '@/pages/Analytics'
 import KnowledgeBase from '@/pages/KnowledgeBase'
 import Tenants from '@/pages/Tenants'
 import Settings from '@/pages/Settings'
+import SystemConfig from '@/pages/SystemConfig'
 import Login from '@/pages/Login'
 import { isLoggedIn } from '@/lib/auth'
 
@@ -57,9 +62,14 @@ export default function App() {
           <Route path="/broadcast" element={<Broadcast />} />
           <Route path="/campaigns" element={<Campaigns />} />
           <Route path="/intent-routing" element={<IntentRouting />} />
+          <Route path="/pipeline" element={<Pipeline />} />
+          <Route path="/booking" element={<Booking />} />
+          <Route path="/payments" element={<Payments />} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="/tenants" element={<Tenants />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/system-config" element={<SystemConfig />} />
         </Route>
       </Routes>
       <Toaster position="bottom-right" />

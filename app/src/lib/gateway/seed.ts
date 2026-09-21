@@ -103,6 +103,7 @@ export const messages: Message[] = [
   M('m11', 'cv4', false, 'Kak paket saya datang tapi boxnya rusak parah, barangnya penyok 😞', 90),
   M('m12', 'cv4', true, 'Waduh maaf banget Anisa! Bisa kirim foto barangnya? Kami langsung proses penggantian tanpa biaya.', 88),
   M('m13', 'cv4', false, '[image] foto-paket.jpg', 75, { type: 'image' }),
+  M('m13b', 'cv4', false, '[voice message]', 73, { type: 'audio' }),
   // c5 — Kenji
   M('m14', 'cv5', false, 'Do you ship to Japan?', 200),
   M('m15', 'cv5', true, 'Hi Kenji! Yes, we ship to Japan via DHL Express (5–7 days). Shipping is free over $120.', 195, { byBot: true }),

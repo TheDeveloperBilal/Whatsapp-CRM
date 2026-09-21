@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Bot, Plus, Trash2, PencilLine, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,7 +44,7 @@ export default function Bots() {
   const sessionName = (id: string) => sessions.find((s) => s.id === id)?.name ?? id
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">AI Auto-Responder</h2>
         <p className="text-muted-foreground">
@@ -226,3 +226,4 @@ export default function Bots() {
     </div>
   )
 }
+

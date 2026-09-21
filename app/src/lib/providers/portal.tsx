@@ -29,6 +29,13 @@ import type {
   BotConfig,
   AutomationRule,
   IntentRule,
+  PipelineStage,
+  Deal,
+  AppointmentType,
+  Appointment,
+  PaymentGateway,
+  PaymentLink,
+  Invoice,
   CannedResponse,
   KbArticle,
   Product,
@@ -89,6 +96,13 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   const [products, setProducts] = useState<Product[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [intents, setIntents] = useState<IntentRule[]>([])
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [appointmentTypes, setAppointmentTypes] = useState<AppointmentType[]>([])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([])
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [msgCache, setMsgCache] = useState<Record<string, Message[]>>({})
 
   const [loading, setLoading] = useState(true)
@@ -139,6 +153,13 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         setProducts(b.products ?? [])
         setCampaigns(b.campaigns ?? [])
         setIntents(b.intents ?? [])
+        setPipelineStages(b.pipelineStages ?? [])
+        setDeals(b.deals ?? [])
+        setAppointmentTypes(b.appointmentTypes ?? [])
+        setAppointments(b.appointments ?? [])
+        setPaymentGateways(b.paymentGateways ?? [])
+        setPaymentLinks(b.paymentLinks ?? [])
+        setInvoices(b.invoices ?? [])
         setStats(b.stats)
         setMsgCache({})
         setBackendOnline(true)
@@ -322,6 +343,65 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         }
         case 'intent.deleted':
           setIntents((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'pipeline.stage': {
+          const stage = e.stage as PipelineStage
+          setPipelineStages((prev) => {
+            const exists = prev.some((x) => x.id === stage.id)
+            return exists ? prev.map((x) => (x.id === stage.id ? stage : x)) : [...prev, stage]
+          })
+          break
+        }
+        case 'pipeline.stage.deleted':
+          setPipelineStages((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'deal': {
+          const deal = e.deal as Deal
+          setDeals((prev) => {
+            const exists = prev.some((x) => x.id === deal.id)
+            return exists ? prev.map((x) => (x.id === deal.id ? deal : x)) : [...prev, deal]
+          })
+          break
+        }
+        case 'deal.deleted':
+          setDeals((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'appointment.type': {
+          const at = e.appointmentType as AppointmentType
+          setAppointmentTypes((prev) => { const ex = prev.some((x) => x.id === at.id); return ex ? prev.map((x) => (x.id === at.id ? at : x)) : [...prev, at] })
+          break
+        }
+        case 'appointment.type.deleted':
+          setAppointmentTypes((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'appointment': {
+          const appt = e.appointment as Appointment
+          setAppointments((prev) => { const ex = prev.some((x) => x.id === appt.id); return ex ? prev.map((x) => (x.id === appt.id ? appt : x)) : [...prev, appt] })
+          break
+        }
+        case 'appointment.deleted':
+          setAppointments((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'payment.gateway': {
+          const gw = e.gateway as PaymentGateway
+          setPaymentGateways((prev) => { const ex = prev.some((x) => x.id === gw.id); return ex ? prev.map((x) => (x.id === gw.id ? gw : x)) : [...prev, gw] })
+          break
+        }
+        case 'payment.gateway.deleted':
+          setPaymentGateways((prev) => prev.filter((x) => x.id !== e.id))
+          break
+        case 'payment.link': {
+          const lnk = e.link as PaymentLink
+          setPaymentLinks((prev) => { const ex = prev.some((x) => x.id === lnk.id); return ex ? prev.map((x) => (x.id === lnk.id ? lnk : x)) : [...prev, lnk] })
+          break
+        }
+        case 'invoice': {
+          const inv = e.invoice as Invoice
+          setInvoices((prev) => { const ex = prev.some((x) => x.id === inv.id); return ex ? prev.map((x) => (x.id === inv.id ? inv : x)) : [...prev, inv] })
+          break
+        }
+        case 'invoice.deleted':
+          setInvoices((prev) => prev.filter((x) => x.id !== e.id))
           break
       }
     })
@@ -637,13 +717,128 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     [client, tenant],
   )
 
+  const createStage = useCallback(async (data: { name: string; color: string }) => {
+    if (!tenant) throw new Error('no tenant')
+    const created = await client.createStage(tenant.id, data)
+    setPipelineStages((prev) => [...prev, created])
+    return created
+  }, [client, tenant])
+
+  const updateStage = useCallback(async (id: string, patch: Partial<PipelineStage>) => {
+    const updated = await client.updateStage(id, patch)
+    setPipelineStages((prev) => prev.map((x) => (x.id === id ? updated : x)))
+  }, [client])
+
+  const deleteStage = useCallback(async (id: string) => {
+    setPipelineStages((prev) => prev.filter((x) => x.id !== id))
+    await client.deleteStage(id).catch(() => {})
+  }, [client])
+
+  const createDeal = useCallback(async (data: Omit<Deal, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) => {
+    if (!tenant) throw new Error('no tenant')
+    const created = await client.createDeal(tenant.id, data)
+    setDeals((prev) => [...prev, created])
+    return created
+  }, [client, tenant])
+
+  const updateDeal = useCallback(async (id: string, patch: Partial<Deal>) => {
+    const updated = await client.updateDeal(id, patch)
+    setDeals((prev) => prev.map((x) => (x.id === id ? updated : x)))
+  }, [client])
+
+  const deleteDeal = useCallback(async (id: string) => {
+    setDeals((prev) => prev.filter((x) => x.id !== id))
+    await client.deleteDeal(id).catch(() => {})
+  }, [client])
+
+  // ── Booking ────────────────────────────────────────────────────────────────
+  const createAppointmentType = useCallback(async (data: Omit<AppointmentType, 'id' | 'tenantId'>) => {
+    const at = await client.createAppointmentType(tenant.id, data)
+    setAppointmentTypes((prev) => [...prev, at])
+    return at
+  }, [client, tenant?.id])
+
+  const updateAppointmentType = useCallback(async (id: string, patch: Partial<AppointmentType>) => {
+    const at = await client.updateAppointmentType(id, patch)
+    setAppointmentTypes((prev) => prev.map((x) => (x.id === id ? at : x)))
+  }, [client])
+
+  const deleteAppointmentType = useCallback(async (id: string) => {
+    setAppointmentTypes((prev) => prev.filter((x) => x.id !== id))
+    await client.deleteAppointmentType(id).catch(() => {})
+  }, [client])
+
+  const createAppointment = useCallback(async (data: Omit<Appointment, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) => {
+    const appt = await client.createAppointment(tenant.id, data)
+    setAppointments((prev) => [...prev, appt])
+    return appt
+  }, [client, tenant?.id])
+
+  const updateAppointment = useCallback(async (id: string, patch: Partial<Appointment>) => {
+    const appt = await client.updateAppointment(id, patch)
+    setAppointments((prev) => prev.map((x) => (x.id === id ? appt : x)))
+  }, [client])
+
+  const deleteAppointment = useCallback(async (id: string) => {
+    setAppointments((prev) => prev.filter((x) => x.id !== id))
+    await client.deleteAppointment(id).catch(() => {})
+  }, [client])
+
+  // ── Payments ───────────────────────────────────────────────────────────────
+  const createPaymentGateway = useCallback(async (data: { provider: string; name: string; secretKey: string; publicKey?: string; webhookSecret?: string; live?: boolean }) => {
+    const gw = await client.createPaymentGateway(tenant.id, data)
+    setPaymentGateways((prev) => [...prev, gw])
+    return gw
+  }, [client, tenant?.id])
+
+  const updatePaymentGateway = useCallback(async (id: string, patch: { name?: string; secretKey?: string; publicKey?: string; live?: boolean; active?: boolean }) => {
+    const gw = await client.updatePaymentGateway(id, patch)
+    setPaymentGateways((prev) => prev.map((x) => (x.id === id ? gw : x)))
+  }, [client])
+
+  const deletePaymentGateway = useCallback(async (id: string) => {
+    setPaymentGateways((prev) => prev.filter((x) => x.id !== id))
+    await client.deletePaymentGateway(id).catch(() => {})
+  }, [client])
+
+  const createPaymentLink = useCallback(async (data: { contactId: string; dealId?: string; amount: number; currency: string; description: string; gatewayId: string }) => {
+    const link = await client.createPaymentLink(tenant.id, data)
+    setPaymentLinks((prev) => [...prev, link])
+    return link
+  }, [client, tenant?.id])
+
+  const updatePaymentLink = useCallback(async (id: string, patch: { status?: string; paidAt?: string }) => {
+    const link = await client.updatePaymentLink(id, patch)
+    setPaymentLinks((prev) => prev.map((x) => (x.id === id ? link : x)))
+  }, [client])
+
+  const sendPaymentLink = useCallback(async (id: string, message?: string) => {
+    await client.sendPaymentLink(id, message)
+  }, [client])
+
+  const createInvoice = useCallback(async (data: { contactId: string; dealId?: string; items: { description: string; qty: number; unitPrice: number }[]; currency?: string; dueDate?: string; notes?: string; taxPct?: number }) => {
+    const inv = await client.createInvoice(tenant.id, data)
+    setInvoices((prev) => [...prev, inv])
+    return inv
+  }, [client, tenant?.id])
+
+  const updateInvoice = useCallback(async (id: string, patch: { status?: string; paidAt?: string; notes?: string; dueDate?: string }) => {
+    const inv = await client.updateInvoice(id, patch)
+    setInvoices((prev) => prev.map((x) => (x.id === id ? inv : x)))
+  }, [client])
+
+  const deleteInvoice = useCallback(async (id: string) => {
+    setInvoices((prev) => prev.filter((x) => x.id !== id))
+    await client.deleteInvoice(id).catch(() => {})
+  }, [client])
+
   const logout = useCallback(() => {
     clearToken()
     window.location.href = '/'
   }, [])
 
   const createTenant = useCallback(
-    async (data: { name: string; slug: string; plan: string; adminUsername: string; adminPassword: string }) => {
+    async (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => {
       const result = await client.createTenant(data)
       // WS 'tenant' event handles adding to state; avoid double-add here
       setTenants((prev) =>
@@ -655,7 +850,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   )
 
   const updateTenant = useCallback(
-    async (id: string, patch: { name?: string; plan?: string; suspended?: boolean }) => {
+    async (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => {
       const updated = await client.updateTenant(id, patch)
       setTenants((prev) => prev.map((t) => (t.id === id ? updated : t)))
     },
@@ -738,6 +933,13 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     products,
     campaigns,
     intents,
+    pipelineStages,
+    deals,
+    appointmentTypes,
+    appointments,
+    paymentGateways,
+    paymentLinks,
+    invoices,
     loading,
     messagesFor,
     ensureMessages,
@@ -774,6 +976,27 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     updateIntent,
     deleteIntent,
     testIntent,
+    createStage,
+    updateStage,
+    deleteStage,
+    createDeal,
+    updateDeal,
+    deleteDeal,
+    createAppointmentType,
+    updateAppointmentType,
+    deleteAppointmentType,
+    createAppointment,
+    updateAppointment,
+    deleteAppointment,
+    createPaymentGateway,
+    updatePaymentGateway,
+    deletePaymentGateway,
+    createPaymentLink,
+    updatePaymentLink,
+    sendPaymentLink,
+    createInvoice,
+    updateInvoice,
+    deleteInvoice,
     createTenant,
     updateTenant,
     deleteTenant,

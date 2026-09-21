@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { Zap, Plus, Trash2, X, FlaskConical, Edit2, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -225,7 +225,7 @@ export default function IntentRouting() {
   const sorted = [...intents].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-4xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -382,3 +382,4 @@ export default function IntentRouting() {
     </div>
   )
 }
+

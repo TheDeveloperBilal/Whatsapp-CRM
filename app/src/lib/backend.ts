@@ -15,6 +15,13 @@ import type {
   BotConfig,
   AutomationRule,
   IntentRule,
+  PipelineStage,
+  Deal,
+  AppointmentType,
+  Appointment,
+  PaymentGateway,
+  PaymentLink,
+  Invoice,
   CannedResponse,
   KbArticle,
   Product,
@@ -37,6 +44,13 @@ export interface Bootstrap {
   products: Product[]
   campaigns: Campaign[]
   intents: IntentRule[]
+  pipelineStages: PipelineStage[]
+  deals: Deal[]
+  appointmentTypes: AppointmentType[]
+  appointments: Appointment[]
+  paymentGateways: PaymentGateway[]
+  paymentLinks: PaymentLink[]
+  invoices: Invoice[]
   stats: DashboardStats
 }
 
@@ -66,6 +80,19 @@ export type ServerEvent =
   | { type: 'campaign.deleted'; id: string }
   | { type: 'intent'; intent: IntentRule }
   | { type: 'intent.deleted'; id: string }
+  | { type: 'pipeline.stage'; stage: PipelineStage }
+  | { type: 'pipeline.stage.deleted'; id: string }
+  | { type: 'deal'; deal: Deal }
+  | { type: 'deal.deleted'; id: string }
+  | { type: 'appointment.type'; appointmentType: AppointmentType }
+  | { type: 'appointment.type.deleted'; id: string }
+  | { type: 'appointment'; appointment: Appointment }
+  | { type: 'appointment.deleted'; id: string }
+  | { type: 'payment.gateway'; gateway: PaymentGateway }
+  | { type: 'payment.gateway.deleted'; id: string }
+  | { type: 'payment.link'; link: PaymentLink }
+  | { type: 'invoice'; invoice: Invoice }
+  | { type: 'invoice.deleted'; id: string }
 
 export interface TenantUser {
   id: string
@@ -308,6 +335,83 @@ export class PortalClient {
     })
   }
 
+  // ── Pipeline Stages ──
+  createStage(tenantId: string, data: { name: string; color: string }) {
+    return this.req<PipelineStage>(`/tenants/${tenantId}/pipeline-stages`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateStage(id: string, patch: Partial<PipelineStage>) {
+    return this.req<PipelineStage>(`/pipeline-stages/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  deleteStage(id: string) {
+    return this.req<{ ok: boolean }>(`/pipeline-stages/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Deals ──
+  createDeal(tenantId: string, data: Omit<Deal, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) {
+    return this.req<Deal>(`/tenants/${tenantId}/deals`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateDeal(id: string, patch: Partial<Deal>) {
+    return this.req<Deal>(`/deals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  deleteDeal(id: string) {
+    return this.req<{ ok: boolean }>(`/deals/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Appointment Types ──
+  createAppointmentType(tenantId: string, data: Omit<AppointmentType, 'id' | 'tenantId'>) {
+    return this.req<AppointmentType>(`/tenants/${tenantId}/appointment-types`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateAppointmentType(id: string, patch: Partial<AppointmentType>) {
+    return this.req<AppointmentType>(`/appointment-types/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  deleteAppointmentType(id: string) {
+    return this.req<{ ok: boolean }>(`/appointment-types/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Appointments ──
+  createAppointment(tenantId: string, data: Omit<Appointment, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) {
+    return this.req<Appointment>(`/tenants/${tenantId}/appointments`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateAppointment(id: string, patch: Partial<Appointment>) {
+    return this.req<Appointment>(`/appointments/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  deleteAppointment(id: string) {
+    return this.req<{ ok: boolean }>(`/appointments/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Payment Gateways ──
+  createPaymentGateway(tenantId: string, data: { provider: string; name: string; secretKey: string; publicKey?: string; webhookSecret?: string; live?: boolean }) {
+    return this.req<PaymentGateway>(`/tenants/${tenantId}/payment-gateways`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updatePaymentGateway(id: string, patch: { name?: string; secretKey?: string; publicKey?: string; webhookSecret?: string; live?: boolean; active?: boolean }) {
+    return this.req<PaymentGateway>(`/payment-gateways/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  deletePaymentGateway(id: string) {
+    return this.req<{ ok: boolean }>(`/payment-gateways/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Payment Links ──
+  createPaymentLink(tenantId: string, data: { contactId: string; dealId?: string; amount: number; currency: string; description: string; gatewayId: string; expiresInHours?: number }) {
+    return this.req<PaymentLink>(`/tenants/${tenantId}/payment-links`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updatePaymentLink(id: string, patch: { status?: string; paidAt?: string }) {
+    return this.req<PaymentLink>(`/payment-links/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  sendPaymentLink(id: string, message?: string) {
+    return this.req<{ ok: boolean }>(`/payment-links/${id}/send`, { method: 'POST', body: JSON.stringify({ message }) })
+  }
+
+  // ── Invoices ──
+  createInvoice(tenantId: string, data: { contactId: string; dealId?: string; items: { description: string; qty: number; unitPrice: number }[]; currency?: string; dueDate?: string; notes?: string; taxPct?: number }) {
+    return this.req<Invoice>(`/tenants/${tenantId}/invoices`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateInvoice(id: string, patch: { status?: string; paidAt?: string; notes?: string; dueDate?: string }) {
+    return this.req<Invoice>(`/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+  }
+  deleteInvoice(id: string) {
+    return this.req<{ ok: boolean }>(`/invoices/${id}`, { method: 'DELETE' })
+  }
+
   // ── Broadcast ──
   broadcast(tenantId: string, message: string, contactIds: string[]) {
     return this.req<{ sent: number; failed: number; results: { contactId: string; ok: boolean; error?: string }[] }>(
@@ -317,7 +421,8 @@ export class PortalClient {
   }
 
   connect(onEvent: (e: ServerEvent) => void): () => void {
-    const wsUrl = `${this.baseUrl.replace(/^http/, 'ws')}/ws`
+    const token = getToken()
+    const wsUrl = `${this.baseUrl.replace(/^http/, 'ws')}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`
     let ws: WebSocket | null = null
     let closed = false
     let retry: ReturnType<typeof setTimeout>

@@ -33,8 +33,8 @@ export async function runIntentRouting(ctx, broadcast) {
             t.label.toLowerCase() === intent.actionTarget.toLowerCase() ||
             t.id === intent.actionTarget,
         )
-        if (tag && !contact.tags.includes(tag.id)) {
-          contact.tags = [...contact.tags, tag.id]
+        if (tag && !(contact.tags || []).includes(tag.id)) {
+          contact.tags = [...(contact.tags || []), tag.id]
           upsert('contacts', contact)
           broadcast({ type: 'contact', contact })
         }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import {
   Building2, Crown, Shield, Headset, Eye,
   Plus, Pencil, Trash2, UserPlus, Loader2,
@@ -30,7 +30,7 @@ type LocalTenantRole = 'owner' | 'admin' | 'agent' | 'viewer'
 type LocalBusinessType = 'service' | 'digital' | 'physical'
 
 const BT_OPTIONS: { value: LocalBusinessType; label: string; emoji: string; desc: string }[] = [
-  { value: 'service',  emoji: '🛠️', label: 'Service Business',  desc: 'Logo design, web dev, writing, consulting...' },
+  { value: 'service',  emoji: '🛠️', label: 'Service Business',  desc: 'Logo design, web dev, writing, consulting...' },
   { value: 'digital',  emoji: '💻', label: 'Digital Products',  desc: 'E-books, games, software, courses...' },
   { value: 'physical', emoji: '📦', label: 'Physical Products', desc: 'Clothing, electronics, food, goods...' },
 ]
@@ -177,10 +177,10 @@ export default function Tenants() {
     setTenantUsers((prev) => prev.filter((u) => u.id !== uid))
   }
 
-  // ── Super-admin view ──────────────────────────────────────────────────────
+  // â”€â”€ Super-admin view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (isSuperAdmin) {
     return (
-      <div className="p-6 space-y-6 max-w-5xl">
+      <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Tenant Management</h2>
@@ -193,7 +193,7 @@ export default function Tenants() {
           </Button>
         </div>
 
-        <Card>
+        <Card className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -493,9 +493,9 @@ export default function Tenants() {
     )
   }
 
-  // ── Regular tenant user view ───────────────────────────────────────────────
+  // â”€â”€ Regular tenant user view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Tenants & Team</h2>
         <p className="text-muted-foreground">
@@ -579,3 +579,4 @@ export default function Tenants() {
     </div>
   )
 }
+

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import {
   Package,
   Plus,
@@ -168,7 +168,7 @@ export default function Products() {
   const startEdit = (p: (typeof products)[0]) => {
     setEditId(p.id)
     setForm({
-      type: p.type as ProductType,
+      type: (p.type as ProductType) || 'service',
       name: p.name,
       category: p.category,
       description: p.description ?? '',
@@ -333,7 +333,7 @@ export default function Products() {
   )
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -379,11 +379,12 @@ export default function Products() {
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{cat}</h3>
           <div className="grid gap-2">
             {items.map((p) => {
-              const Icon = TYPE_ICONS[p.type as ProductType]
+              const ptype: ProductType = (p.type as ProductType) || 'service'
+              const Icon = TYPE_ICONS[ptype]
               return (
                 <Card key={p.id} className={!p.active ? 'opacity-50' : undefined}>
                   <CardContent className="flex items-start gap-4 p-4">
-                    <div className={`mt-0.5 rounded-md p-1.5 ${TYPE_COLORS[p.type as ProductType]}`}>
+                    <div className={`mt-0.5 rounded-md p-1.5 ${TYPE_COLORS[ptype]}`}>
                       <Icon className="size-4" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -395,7 +396,7 @@ export default function Products() {
                       </div>
                       {p.description && <p className="mt-0.5 text-sm text-muted-foreground line-clamp-1">{p.description}</p>}
                       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
-                        <span className="font-semibold">{p.currency} {p.price.toLocaleString()}{p.pricingModel === 'hourly' ? '/hr' : p.pricingModel === 'quote' ? ' (quote)' : ''}</span>
+                        <span className="font-semibold">{p.currency} {(p.price ?? 0).toLocaleString()}{p.pricingModel === 'hourly' ? '/hr' : p.pricingModel === 'quote' ? ' (quote)' : ''}</span>
                         {p.variants?.map((v) => (
                           <span key={v.name} className="text-xs text-muted-foreground border rounded px-1.5 py-0.5">
                             {v.name}: {v.options.join(', ')}
@@ -433,3 +434,4 @@ export default function Products() {
     </div>
   )
 }
+

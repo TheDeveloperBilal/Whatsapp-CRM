@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import {
   Plus, Pencil, Trash2, Copy, QrCode, ExternalLink,
@@ -177,7 +177,7 @@ export default function Campaigns() {
   const previewLink = waLink(previewPhone, previewMsg)
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Lead Capture & Campaigns</h2>
@@ -524,3 +524,4 @@ export default function Campaigns() {
     </div>
   )
 }
+

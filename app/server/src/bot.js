@@ -32,8 +32,10 @@ export const aiStatus = () => ({
 })
 
 const HANDOFF_KEYWORDS = [
-  'human', 'real person', 'agent', 'support', 'talk to someone',
-  'speak to someone', 'customer service', 'representative', 'staff',
+  'human', 'real person', 'real agent', 'real human', 'real customer service',
+  'agent', 'talk to someone', 'speak to someone',
+  'customer service', 'representative', 'staff',
+  'manager', 'boss', 'supervisor', 'transfer me',
   'manusia', 'orang asli', 'cs', 'admin', 'operator',
 ]
 
@@ -73,7 +75,7 @@ async function callLLM(cfg, history, inboundText) {
   const kbArticles = collection('knowledgeBase').filter((a) => a.tenantId === cfg.tenantId)
   if (kbArticles.length > 0) {
     const kbBlock = kbArticles
-      .map((a) => `### ${a.title} (${a.category})\n${a.content}`)
+      .map((a) => `### ${a.title}\n${a.body || a.content || ''}`)
       .join('\n\n')
     systemContent += `\n\n--- KNOWLEDGE BASE ---\nUse the information below to answer customer questions accurately. Do not invent facts not present here.\n\n${kbBlock}\n--- END KNOWLEDGE BASE ---`
   }
@@ -133,8 +135,9 @@ async function callLLM(cfg, history, inboundText) {
   }
 
   // Send up to 60 messages — covers multi-day conversations without hitting token limits
-  // Older messages beyond 60 are summarised implicitly by the context note above
-  const recentHistory = history.slice(-60)
+  // Slice to -61 so the current inbound message (already in history) is excluded,
+  // then append it explicitly as the final user turn (avoids duplicate context)
+  const recentHistory = history.slice(-61, -1)
   const messages = [
     { role: 'system', content: systemContent },
     ...recentHistory.map((m) => ({

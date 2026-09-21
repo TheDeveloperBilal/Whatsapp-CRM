@@ -1,6 +1,8 @@
 // ─── REST API ────────────────────────────────────────────────────────────────
+import fs from 'node:fs'
+import path from 'node:path'
 import { Router } from 'express'
-import { collection, upsert, remove, uid, save } from './db.js'
+import { collection, upsert, remove, uid, save, MEDIA_DIR } from './db.js'
 import { startSession, stopSession, sendText } from './wa.js'
 import { aiStatus } from './bot.js'
 import { runAutomations } from './automations.js'
@@ -13,7 +15,61 @@ import {
   requireSuperAdmin,
   canAccessTenant,
   getPlanLimits,
+  loginRateLimit,
 } from './auth.js'
+
+// Strip secret key before sending to frontend
+function safeGateway(gw) {
+  const { secretKey, webhookSecret, ...safe } = gw
+  safe.hasSecretKey = !!secretKey
+  return safe
+}
+
+// Generate a hosted checkout URL via Stripe or PayPal
+async function generatePaymentUrl(gw, { amount, currency, description }) {
+  if (gw.provider === 'stripe') {
+    const body = new URLSearchParams()
+    body.append('payment_method_types[]', 'card')
+    body.append('mode', 'payment')
+    body.append('success_url', 'https://example.com/success')
+    body.append('cancel_url', 'https://example.com/cancel')
+    body.append('line_items[0][price_data][currency]', currency.toLowerCase())
+    body.append('line_items[0][price_data][product_data][name]', description)
+    body.append('line_items[0][price_data][unit_amount]', String(Math.round(amount * 100)))
+    body.append('line_items[0][quantity]', '1')
+    const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${gw.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    })
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Stripe error') }
+    const data = await r.json()
+    return data.url
+  }
+  if (gw.provider === 'paypal') {
+    // Get access token
+    const tokenRes = await fetch('https://api-m.paypal.com/v1/oauth2/token', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${Buffer.from(`${gw.publicKey}:${gw.secretKey}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=client_credentials',
+    })
+    if (!tokenRes.ok) throw new Error('PayPal auth failed')
+    const { access_token } = await tokenRes.json()
+    const orderRes = await fetch('https://api-m.paypal.com/v2/checkout/orders', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [{ amount: { currency_code: currency.toUpperCase(), value: String(amount) }, description }],
+        application_context: { return_url: 'https://example.com/success', cancel_url: 'https://example.com/cancel' },
+      }),
+    })
+    if (!orderRes.ok) throw new Error('PayPal order creation failed')
+    const order = await orderRes.json()
+    return order.links?.find((l) => l.rel === 'approve')?.href || null
+  }
+  return null
+}
 
 export function buildApi(broadcast) {
   const r = Router()
@@ -21,7 +77,7 @@ export function buildApi(broadcast) {
   // ── Public routes (no auth) ──
   r.get('/health', (_req, res) => res.json({ ok: true, ai: aiStatus() }))
 
-  r.post('/auth/login', (req, res) => {
+  r.post('/auth/login', loginRateLimit, (req, res) => {
     const { username, password } = req.body
     if (!username || !password) return res.status(400).json({ error: 'username and password required' })
     const user = collection('users').find((u) => u.username === username)
@@ -71,7 +127,15 @@ export function buildApi(broadcast) {
     // seed required sub-collections
     if (!collection('botConfigs')) collection('botConfigs', [])
     if (!collection('botConfigs').find((c) => c.tenantId === tenant.id)) {
-      collection('botConfigs').push({ tenantId: tenant.id, aiEnabled: false, persona: '', fallback: 'human', fallbackMessage: '', businessHoursOnly: false, model: '' })
+      collection('botConfigs').push({
+        tenantId: tenant.id,
+        aiEnabled: true,
+        persona: "Your name is Sam. You are a customer support rep — a real team member chatting on WhatsApp, not a bot.\n\nTONE: Text like a normal person. Keep replies to 1-3 sentences, friendly and direct. Match the customer's language immediately — if they write in Urdu or Arabic, reply in that language. If casual, match that energy.\n\nNever use bullet points unless they ask for a list. No em-dashes. No corporate jargon. Avoid: certainly, delve, foster, revolutionize, tapestry, testament. Don't open with 'How may I assist' or 'I hope this message finds you well'.\n\nNON-WORK CONVERSATION: If a customer talks about something casual, respond like a real person — warm, brief, and human. You don't have to redirect every message to business.\n\nNEGOTIATION: If a customer asks for a discount, first sell the value and quality of the service. Only if they keep pushing, offer up to 10% discount — never more, and never offer it immediately.\n\nMEMORY: Remember every detail the customer shares. Never ask them to repeat themselves.\n\nIDENTITY: If asked 'are you a bot?': 'Yeah, I'm an AI helping the team — but I can handle most things directly. What do you need?'\n\nLIMITS: Never invent prices or policies not in your knowledge base. For refund terms, payment methods, custom quotes, or contracts — say: 'Let me connect you with our team on that.' Never say 'As an AI I don't have access to'.",
+        fallback: 'human',
+        fallbackMessage: 'Thanks! A team member will follow up with you shortly. 🙏',
+        businessHoursOnly: false,
+        model: 'nvidia/nemotron-3-ultra-550b-a55b',
+      })
     }
     save()
     broadcast({ type: 'tenant', tenant })
@@ -153,24 +217,49 @@ export function buildApi(broadcast) {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     const stats = computeStats(tid)
     res.json({
-      tags: collection('tags'),
-      sessions: collection('sessions').filter((s) => s.tenantId === tid),
-      contacts: collection('contacts').filter((c) => c.tenantId === tid),
+      tags: collection('tags') || [],
+      sessions: (collection('sessions') || []).filter((s) => s.tenantId === tid),
+      contacts: (collection('contacts') || []).filter((c) => c.tenantId === tid),
       conversations: convs,
-      messagesCount: collection('messages').length,
-      botRules: collection('botRules').filter((b) => b.tenantId === tid),
-      botConfig: collection('botConfigs').find((b) => b.tenantId === tid) ?? null,
-      automations: collection('automations').filter((a) => a.tenantId === tid),
-      cannedResponses: collection('cannedResponses').filter((cr) => cr.tenantId === tid),
-      knowledgeBase: collection('knowledgeBase').filter((a) => a.tenantId === tid),
-      products: collection('products').filter((p) => p.tenantId === tid),
-      campaigns: collection('campaigns').filter((c) => c.tenantId === tid),
-      intents: collection('intents').filter((i) => i.tenantId === tid),
+      messagesCount: (collection('messages') || []).length,
+      botRules: (collection('botRules') || []).filter((b) => b.tenantId === tid),
+      botConfig: (collection('botConfigs') || []).find((b) => b.tenantId === tid) ?? null,
+      automations: (collection('automations') || []).filter((a) => a.tenantId === tid),
+      cannedResponses: (collection('cannedResponses') || []).filter((cr) => cr.tenantId === tid),
+      knowledgeBase: (collection('knowledgeBase') || []).filter((a) => a.tenantId === tid),
+      products: (collection('products') || []).filter((p) => p.tenantId === tid),
+      campaigns: (collection('campaigns') || []).filter((c) => c.tenantId === tid),
+      intents: (collection('intents') || []).filter((i) => i.tenantId === tid),
+      pipelineStages: (collection('pipelineStages') || []).filter((s) => s.tenantId === tid).sort((a, b) => a.order - b.order),
+      deals: (collection('deals') || []).filter((d) => d.tenantId === tid),
+      appointmentTypes: (collection('appointmentTypes') || []).filter((a) => a.tenantId === tid),
+      appointments: (collection('appointments') || []).filter((a) => a.tenantId === tid),
+      paymentGateways: (collection('paymentGateways') || []).filter((g) => g.tenantId === tid).map(safeGateway),
+      paymentLinks: (collection('paymentLinks') || []).filter((p) => p.tenantId === tid),
+      invoices: (collection('invoices') || []).filter((i) => i.tenantId === tid),
       stats,
     })
   })
 
+  // ── Media files (voice notes, etc.) ──
+  r.get('/media/:msgId', (req, res) => {
+    const msgId = req.params.msgId.replace(/[^a-zA-Z0-9_-]/g, '')
+    let found
+    try {
+      found = fs.readdirSync(MEDIA_DIR).find((f) => f.startsWith(msgId + '.'))
+    } catch { /* media dir missing */ }
+    if (!found) return res.status(404).json({ error: 'not found' })
+    const ext = found.split('.').pop()
+    const mime = ext === 'mp4' ? 'audio/mp4' : 'audio/ogg; codecs=opus'
+    res.setHeader('Content-Type', mime)
+    res.setHeader('Accept-Ranges', 'bytes')
+    res.sendFile(path.resolve(MEDIA_DIR, found))
+  })
+
   r.get('/conversations/:cid/messages', (req, res) => {
+    const conv = collection('conversations').find((c) => c.id === req.params.cid)
+    if (!conv) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, conv.tenantId)) return res.status(403).json({ error: 'forbidden' })
     const msgs = collection('messages')
       .filter((m) => m.conversationId === req.params.cid)
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
@@ -180,7 +269,9 @@ export function buildApi(broadcast) {
   r.post('/conversations/:cid/messages', async (req, res) => {
     const conv = collection('conversations').find((c) => c.id === req.params.cid)
     if (!conv) return res.status(404).json({ error: 'conversation not found' })
+    if (!canAccessTenant(req.user, conv.tenantId)) return res.status(403).json({ error: 'forbidden' })
     const contact = collection('contacts').find((c) => c.id === conv.contactId)
+    if (!contact) return res.status(404).json({ error: 'contact not found' })
     try {
       const sent = await sendText(conv.sessionId, contact.chatId, req.body.text)
       const msg = {
@@ -207,8 +298,14 @@ export function buildApi(broadcast) {
   r.patch('/conversations/:cid', (req, res) => {
     const conv = collection('conversations').find((c) => c.id === req.params.cid)
     if (!conv) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, conv.tenantId)) return res.status(403).json({ error: 'forbidden' })
     const prevStatus = conv.status
-    Object.assign(conv, req.body) // status / botEnabled / assigneeId / unread
+    // Whitelist — never allow tenantId, contactId, sessionId to be overwritten
+    const { status, botEnabled, assigneeId, unread } = req.body
+    if (status !== undefined) conv.status = status
+    if (botEnabled !== undefined) conv.botEnabled = botEnabled
+    if (assigneeId !== undefined) conv.assigneeId = assigneeId
+    if (unread !== undefined) conv.unread = unread
     save()
     broadcast({ type: 'conversation', conversation: conv })
     if (conv.status === 'resolved' && prevStatus !== 'resolved') {
@@ -601,6 +698,310 @@ export function buildApi(broadcast) {
     }
   })
 
+  // ── Pipeline Stages ──
+  r.get('/tenants/:tid/pipeline-stages', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json(collection('pipelineStages').filter((s) => s.tenantId === req.params.tid).sort((a, b) => a.order - b.order))
+  })
+
+  r.post('/tenants/:tid/pipeline-stages', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { name, color = '#6366f1' } = req.body
+    if (!name) return res.status(400).json({ error: 'name required' })
+    const existing = collection('pipelineStages').filter((s) => s.tenantId === req.params.tid)
+    const stage = { id: uid('ps'), tenantId: req.params.tid, name, color, order: existing.length }
+    upsert('pipelineStages', stage)
+    save()
+    broadcast({ type: 'pipeline.stage', stage })
+    res.json(stage)
+  })
+
+  r.patch('/pipeline-stages/:id', (req, res) => {
+    const stage = collection('pipelineStages').find((s) => s.id === req.params.id)
+    if (!stage) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, stage.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { name, color, order } = req.body
+    if (name  !== undefined) stage.name  = name
+    if (color !== undefined) stage.color = color
+    if (order !== undefined) stage.order = order
+    save()
+    broadcast({ type: 'pipeline.stage', stage })
+    res.json(stage)
+  })
+
+  r.delete('/pipeline-stages/:id', (req, res) => {
+    const stage = collection('pipelineStages').find((s) => s.id === req.params.id)
+    if (!stage) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, stage.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('pipelineStages', (s) => s.id === req.params.id)
+    save()
+    broadcast({ type: 'pipeline.stage.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // ── Deals ──
+  r.get('/tenants/:tid/deals', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json(collection('deals').filter((d) => d.tenantId === req.params.tid))
+  })
+
+  r.post('/tenants/:tid/deals', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { contactId, stageId, title, value = 0, currency = 'USD', assigneeId, notes = '' } = req.body
+    if (!contactId || !stageId || !title) return res.status(400).json({ error: 'contactId, stageId, title required' })
+    const now = new Date().toISOString()
+    const deal = { id: uid('deal'), tenantId: req.params.tid, contactId, stageId, title, value: Number(value), currency, assigneeId: assigneeId || null, notes, createdAt: now, updatedAt: now, outcome: null }
+    upsert('deals', deal)
+    save()
+    broadcast({ type: 'deal', deal })
+    res.json(deal)
+  })
+
+  r.patch('/deals/:id', (req, res) => {
+    const deal = collection('deals').find((d) => d.id === req.params.id)
+    if (!deal) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, deal.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { stageId, title, value, currency, assigneeId, notes, outcome } = req.body
+    if (stageId    !== undefined) deal.stageId    = stageId
+    if (title      !== undefined) deal.title      = title
+    if (value      !== undefined) deal.value      = Number(value)
+    if (currency   !== undefined) deal.currency   = currency
+    if (assigneeId !== undefined) deal.assigneeId = assigneeId
+    if (notes      !== undefined) deal.notes      = notes
+    if (outcome    !== undefined) { deal.outcome  = outcome; deal.closedAt = outcome ? new Date().toISOString() : null }
+    deal.updatedAt = new Date().toISOString()
+    save()
+    broadcast({ type: 'deal', deal })
+    res.json(deal)
+  })
+
+  r.delete('/deals/:id', (req, res) => {
+    const deal = collection('deals').find((d) => d.id === req.params.id)
+    if (!deal) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, deal.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('deals', (d) => d.id === req.params.id)
+    save()
+    broadcast({ type: 'deal.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // ── Appointment Types ──
+  r.get('/tenants/:tid/appointment-types', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json((collection('appointmentTypes') || []).filter((a) => a.tenantId === req.params.tid))
+  })
+  r.post('/tenants/:tid/appointment-types', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { name, duration = 60, price = 0, currency = 'USD', description = '', active = true } = req.body
+    if (!name) return res.status(400).json({ error: 'name required' })
+    const at = { id: uid('at'), tenantId: req.params.tid, name, duration: Number(duration), price: Number(price), currency, description, active }
+    upsert('appointmentTypes', at)
+    save()
+    broadcast({ type: 'appointment.type', appointmentType: at })
+    res.json(at)
+  })
+  r.patch('/appointment-types/:id', (req, res) => {
+    const at = (collection('appointmentTypes') || []).find((a) => a.id === req.params.id)
+    if (!at) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, at.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { name, duration, price, currency, description, active } = req.body
+    if (name        !== undefined) at.name        = name
+    if (duration    !== undefined) at.duration    = Number(duration)
+    if (price       !== undefined) at.price       = Number(price)
+    if (currency    !== undefined) at.currency    = currency
+    if (description !== undefined) at.description = description
+    if (active      !== undefined) at.active      = active
+    save()
+    broadcast({ type: 'appointment.type', appointmentType: at })
+    res.json(at)
+  })
+  r.delete('/appointment-types/:id', (req, res) => {
+    const at = (collection('appointmentTypes') || []).find((a) => a.id === req.params.id)
+    if (!at) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, at.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('appointmentTypes', (a) => a.id === req.params.id)
+    save()
+    broadcast({ type: 'appointment.type.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // ── Appointments ──
+  r.get('/tenants/:tid/appointments', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json((collection('appointments') || []).filter((a) => a.tenantId === req.params.tid).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
+  })
+  r.post('/tenants/:tid/appointments', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { contactId, appointmentTypeId, date, time, notes = '', sessionId } = req.body
+    if (!contactId || !appointmentTypeId || !date || !time) return res.status(400).json({ error: 'contactId, appointmentTypeId, date, time required' })
+    const now = new Date().toISOString()
+    const appt = { id: uid('appt'), tenantId: req.params.tid, contactId, appointmentTypeId, date, time, status: 'confirmed', notes, sessionId: sessionId || null, createdAt: now, updatedAt: now }
+    upsert('appointments', appt)
+    save()
+    broadcast({ type: 'appointment', appointment: appt })
+    res.json(appt)
+  })
+  r.patch('/appointments/:id', (req, res) => {
+    const appt = (collection('appointments') || []).find((a) => a.id === req.params.id)
+    if (!appt) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, appt.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { date, time, status, notes, appointmentTypeId } = req.body
+    if (date              !== undefined) appt.date              = date
+    if (time              !== undefined) appt.time              = time
+    if (status            !== undefined) appt.status            = status
+    if (notes             !== undefined) appt.notes             = notes
+    if (appointmentTypeId !== undefined) appt.appointmentTypeId = appointmentTypeId
+    appt.updatedAt = new Date().toISOString()
+    save()
+    broadcast({ type: 'appointment', appointment: appt })
+    res.json(appt)
+  })
+  r.delete('/appointments/:id', (req, res) => {
+    const appt = (collection('appointments') || []).find((a) => a.id === req.params.id)
+    if (!appt) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, appt.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('appointments', (a) => a.id === req.params.id)
+    save()
+    broadcast({ type: 'appointment.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // ── Payment Gateways ──
+  r.get('/tenants/:tid/payment-gateways', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json((collection('paymentGateways') || []).filter((g) => g.tenantId === req.params.tid).map(safeGateway))
+  })
+  r.post('/tenants/:tid/payment-gateways', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { provider, name, secretKey, publicKey = '', webhookSecret = '', live = false, active = true } = req.body
+    if (!provider || !name || !secretKey) return res.status(400).json({ error: 'provider, name, secretKey required' })
+    const gw = { id: uid('gw'), tenantId: req.params.tid, provider, name, secretKey, publicKey, webhookSecret, live, active, createdAt: new Date().toISOString() }
+    upsert('paymentGateways', gw)
+    save()
+    broadcast({ type: 'payment.gateway', gateway: safeGateway(gw) })
+    res.json(safeGateway(gw))
+  })
+  r.patch('/payment-gateways/:id', (req, res) => {
+    const gw = (collection('paymentGateways') || []).find((g) => g.id === req.params.id)
+    if (!gw) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, gw.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { name, secretKey, publicKey, webhookSecret, live, active } = req.body
+    if (name          !== undefined) gw.name          = name
+    if (secretKey     !== undefined) gw.secretKey     = secretKey
+    if (publicKey     !== undefined) gw.publicKey     = publicKey
+    if (webhookSecret !== undefined) gw.webhookSecret = webhookSecret
+    if (live          !== undefined) gw.live          = live
+    if (active        !== undefined) gw.active        = active
+    save()
+    broadcast({ type: 'payment.gateway', gateway: safeGateway(gw) })
+    res.json(safeGateway(gw))
+  })
+  r.delete('/payment-gateways/:id', (req, res) => {
+    const gw = (collection('paymentGateways') || []).find((g) => g.id === req.params.id)
+    if (!gw) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, gw.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('paymentGateways', (g) => g.id === req.params.id)
+    save()
+    broadcast({ type: 'payment.gateway.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
+  // ── Payment Links ──
+  r.get('/tenants/:tid/payment-links', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json((collection('paymentLinks') || []).filter((p) => p.tenantId === req.params.tid))
+  })
+  r.post('/tenants/:tid/payment-links', async (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { contactId, dealId, amount, currency = 'USD', description, gatewayId, expiresInHours = 24 } = req.body
+    if (!contactId || !amount || !description || !gatewayId) return res.status(400).json({ error: 'contactId, amount, description, gatewayId required' })
+    const gw = (collection('paymentGateways') || []).find((g) => g.id === gatewayId)
+    if (!gw) return res.status(404).json({ error: 'gateway not found' })
+    let url = null
+    try { url = await generatePaymentUrl(gw, { amount: Number(amount), currency, description }) } catch (e) { console.error('[payment]', e.message) }
+    const expiresAt = new Date(Date.now() + expiresInHours * 3600_000).toISOString()
+    const link = { id: uid('pl'), tenantId: req.params.tid, contactId, dealId: dealId || null, gatewayId, provider: gw.provider, amount: Number(amount), currency, description, status: url ? 'active' : 'failed', url, expiresAt, paidAt: null, createdAt: new Date().toISOString() }
+    upsert('paymentLinks', link)
+    save()
+    broadcast({ type: 'payment.link', link })
+    res.json(link)
+  })
+  r.patch('/payment-links/:id', (req, res) => {
+    const link = (collection('paymentLinks') || []).find((p) => p.id === req.params.id)
+    if (!link) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, link.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { status, paidAt } = req.body
+    if (status !== undefined) link.status = status
+    if (paidAt !== undefined) link.paidAt = paidAt
+    save()
+    broadcast({ type: 'payment.link', link })
+    res.json(link)
+  })
+
+  // ── Send payment link via WhatsApp ──
+  r.post('/payment-links/:id/send', async (req, res) => {
+    const link = (collection('paymentLinks') || []).find((p) => p.id === req.params.id)
+    if (!link) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, link.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const contact = collection('contacts').find((c) => c.id === link.contactId)
+    if (!contact) return res.status(404).json({ error: 'contact not found' })
+    const sessions = collection('sessions').filter((s) => s.tenantId === link.tenantId && s.status === 'connected')
+    if (!sessions.length) return res.status(502).json({ error: 'no connected session' })
+    const session = sessions[0]
+    const msg = req.body.message || `💳 *Payment Request*\n\nAmount: ${link.currency} ${link.amount}\n${link.description}\n\nPay here: ${link.url || '(link pending)'}\n\nThis link expires in 24 hours.`
+    try {
+      const sent = await sendText(session.id, contact.chatId, msg)
+      const conv = collection('conversations').find((c) => c.tenantId === link.tenantId && c.contactId === link.contactId) || null
+      if (conv) {
+        const m = { id: sent.id, conversationId: conv.id, fromMe: true, body: msg, type: 'text', status: 'sent', byBot: false, timestamp: sent.timestamp }
+        upsert('messages', m)
+        conv.lastMessage = m; conv.updatedAt = m.timestamp; save()
+        broadcast({ type: 'message', message: m, conversation: conv, contact })
+      }
+      res.json({ ok: true })
+    } catch (e) { res.status(502).json({ error: e.message }) }
+  })
+
+  // ── Invoices ──
+  r.get('/tenants/:tid/invoices', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json((collection('invoices') || []).filter((i) => i.tenantId === req.params.tid))
+  })
+  r.post('/tenants/:tid/invoices', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { contactId, dealId, items = [], currency = 'USD', dueDate, notes = '' } = req.body
+    if (!contactId || !items.length) return res.status(400).json({ error: 'contactId and items required' })
+    const subtotal = items.reduce((s, i) => s + i.qty * i.unitPrice, 0)
+    const tax = req.body.taxPct ? Math.round(subtotal * (req.body.taxPct / 100) * 100) / 100 : 0
+    const inv = { id: uid('inv'), tenantId: req.params.tid, contactId, dealId: dealId || null, items, subtotal, tax, total: subtotal + tax, currency, dueDate: dueDate || null, notes, status: 'draft', paidAt: null, createdAt: new Date().toISOString() }
+    upsert('invoices', inv)
+    save()
+    broadcast({ type: 'invoice', invoice: inv })
+    res.json(inv)
+  })
+  r.patch('/invoices/:id', (req, res) => {
+    const inv = (collection('invoices') || []).find((i) => i.id === req.params.id)
+    if (!inv) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, inv.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { status, paidAt, notes, dueDate } = req.body
+    if (status  !== undefined) inv.status  = status
+    if (paidAt  !== undefined) inv.paidAt  = paidAt
+    if (notes   !== undefined) inv.notes   = notes
+    if (dueDate !== undefined) inv.dueDate = dueDate
+    save()
+    broadcast({ type: 'invoice', invoice: inv })
+    res.json(inv)
+  })
+  r.delete('/invoices/:id', (req, res) => {
+    const inv = (collection('invoices') || []).find((i) => i.id === req.params.id)
+    if (!inv) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, inv.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('invoices', (i) => i.id === req.params.id)
+    save()
+    broadcast({ type: 'invoice.deleted', id: req.params.id })
+    res.json({ ok: true })
+  })
+
   // ── Broadcast ──
   r.post('/tenants/:tid/broadcast', async (req, res) => {
     const tenant = collection('tenants').find((t) => t.id === req.params.tid)
@@ -610,6 +1011,13 @@ export function buildApi(broadcast) {
     if (!message || !Array.isArray(contactIds) || contactIds.length === 0)
       return res.status(400).json({ error: 'message and contactIds required' })
 
+    // Hard cap: sending to more than 200 contacts in one blast is high ban risk
+    const BATCH_LIMIT = 200
+    if (contactIds.length > BATCH_LIMIT)
+      return res.status(400).json({
+        error: `Broadcast limited to ${BATCH_LIMIT} contacts per send to reduce WhatsApp ban risk. Split into smaller batches.`,
+      })
+
     const sessions = collection('sessions').filter(
       (s) => s.tenantId === req.params.tid && s.status === 'connected',
     )
@@ -617,14 +1025,19 @@ export function buildApi(broadcast) {
     const session = sessions[0]
 
     const results = []
-    for (const cid of contactIds) {
+    for (let i = 0; i < contactIds.length; i++) {
+      const cid = contactIds[i]
       const contact = collection('contacts').find((c) => c.id === cid)
       if (!contact) { results.push({ contactId: cid, ok: false, error: 'not found' }); continue }
       try {
-        // small delay between sends to avoid rate-limiting
-        await new Promise((r) => setTimeout(r, 800))
+        // Random 3–8 s delay between every send — mimics a human typing and sending
+        await new Promise((resolve) => setTimeout(resolve, 3000 + Math.random() * 5000))
+        // Extra 30 s cooldown every 20 messages — avoids sustained sending patterns
+        if (i > 0 && i % 20 === 0) {
+          console.log(`[broadcast] 20-message cooldown pause (sent ${i}/${contactIds.length})`)
+          await new Promise((resolve) => setTimeout(resolve, 30_000))
+        }
         const sent = await sendText(session.id, contact.chatId, message)
-        // persist as a conversation message
         let conv = collection('conversations').find(
           (c) => c.tenantId === req.params.tid && c.sessionId === session.id && c.contactId === cid,
         )

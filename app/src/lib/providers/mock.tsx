@@ -32,6 +32,13 @@ import type {
   BotConfig,
   AutomationRule,
   IntentRule,
+  PipelineStage,
+  Deal,
+  AppointmentType,
+  Appointment,
+  PaymentGateway,
+  PaymentLink,
+  Invoice,
   CannedResponse,
   KbArticle,
   Product,
@@ -75,6 +82,23 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   const [products, setProducts] = useState<Product[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [intents, setIntents] = useState<IntentRule[]>([])
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([
+    { id: 'ps1', tenantId: 't1', name: 'New Lead',  color: '#3b82f6', order: 0 },
+    { id: 'ps2', tenantId: 't1', name: 'Contacted', color: '#f59e0b', order: 1 },
+    { id: 'ps3', tenantId: 't1', name: 'Qualified', color: '#8b5cf6', order: 2 },
+    { id: 'ps4', tenantId: 't1', name: 'Proposal',  color: '#ec4899', order: 3 },
+    { id: 'ps5', tenantId: 't1', name: 'Won',       color: '#10b981', order: 4 },
+    { id: 'ps6', tenantId: 't1', name: 'Lost',      color: '#ef4444', order: 5 },
+  ])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [appointmentTypes, setAppointmentTypes] = useState<AppointmentType[]>([
+    { id: 'at1', tenantId: 't1', name: 'Free Consultation', duration: 30, price: 0, currency: 'USD', description: '30-minute discovery call', active: true },
+    { id: 'at2', tenantId: 't1', name: 'Service Session', duration: 60, price: 50, currency: 'USD', description: '1-hour full service session', active: true },
+  ])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([])
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
   const botConfig = useMemo(
     () => configs.find((c) => c.tenantId === tenantId) ?? configs[0],
     [configs, tenantId],
@@ -309,6 +333,110 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     return intents.find((i) => i.enabled && i.keywords.some((kw) => lower.includes(kw.trim().toLowerCase()))) ?? null
   }, [intents])
 
+  const createStage = useCallback(async (data: { name: string; color: string }) => {
+    const stage: PipelineStage = { ...data, id: `ps${Date.now()}`, tenantId, order: pipelineStages.length }
+    setPipelineStages((prev) => [...prev, stage])
+    return stage
+  }, [tenantId, pipelineStages.length])
+
+  const updateStage = useCallback(async (id: string, patch: Partial<PipelineStage>) => {
+    setPipelineStages((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
+  }, [])
+
+  const deleteStage = useCallback(async (id: string) => {
+    setPipelineStages((prev) => prev.filter((s) => s.id !== id))
+  }, [])
+
+  const createDeal = useCallback(async (data: Omit<Deal, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) => {
+    const now = new Date().toISOString()
+    const deal: Deal = { ...data, id: `deal${Date.now()}`, tenantId, createdAt: now, updatedAt: now }
+    setDeals((prev) => [...prev, deal])
+    return deal
+  }, [tenantId])
+
+  const updateDeal = useCallback(async (id: string, patch: Partial<Deal>) => {
+    setDeals((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch, updatedAt: new Date().toISOString() } : d)))
+  }, [])
+
+  const deleteDeal = useCallback(async (id: string) => {
+    setDeals((prev) => prev.filter((d) => d.id !== id))
+  }, [])
+
+  // ── Booking ──
+  const createAppointmentType = useCallback(async (data: Omit<AppointmentType, 'id' | 'tenantId'>) => {
+    const at: AppointmentType = { ...data, id: `at${Date.now()}`, tenantId }
+    setAppointmentTypes((prev) => [...prev, at])
+    return at
+  }, [tenantId])
+
+  const updateAppointmentType = useCallback(async (id: string, patch: Partial<AppointmentType>) => {
+    setAppointmentTypes((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }, [])
+
+  const deleteAppointmentType = useCallback(async (id: string) => {
+    setAppointmentTypes((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
+  const createAppointment = useCallback(async (data: Omit<Appointment, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) => {
+    const now = new Date().toISOString()
+    const appt: Appointment = { ...data, id: `appt${Date.now()}`, tenantId, createdAt: now, updatedAt: now }
+    setAppointments((prev) => [...prev, appt])
+    return appt
+  }, [tenantId])
+
+  const updateAppointment = useCallback(async (id: string, patch: Partial<Appointment>) => {
+    setAppointments((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: new Date().toISOString() } : x)))
+  }, [])
+
+  const deleteAppointment = useCallback(async (id: string) => {
+    setAppointments((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
+  // ── Payments ──
+  const createPaymentGateway = useCallback(async (data: { provider: string; name: string; secretKey: string; publicKey?: string; live?: boolean }) => {
+    const gw: PaymentGateway = { id: `gw${Date.now()}`, tenantId, provider: data.provider as 'stripe' | 'paypal', name: data.name, publicKey: data.publicKey, hasSecretKey: true, live: data.live ?? false, active: true, createdAt: new Date().toISOString() }
+    setPaymentGateways((prev) => [...prev, gw])
+    return gw
+  }, [tenantId])
+
+  const updatePaymentGateway = useCallback(async (id: string, patch: { name?: string; live?: boolean; active?: boolean }) => {
+    setPaymentGateways((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }, [])
+
+  const deletePaymentGateway = useCallback(async (id: string) => {
+    setPaymentGateways((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
+  const createPaymentLink = useCallback(async (data: { contactId: string; dealId?: string; amount: number; currency: string; description: string; gatewayId: string }) => {
+    const link: PaymentLink = { id: `pl${Date.now()}`, tenantId, ...data, dealId: data.dealId || null, provider: (paymentGateways.find((g) => g.id === data.gatewayId)?.provider ?? 'stripe'), status: 'active', url: `https://checkout.example.com/demo/${Date.now()}`, expiresAt: new Date(Date.now() + 86400000).toISOString(), paidAt: null, createdAt: new Date().toISOString() }
+    setPaymentLinks((prev) => [...prev, link])
+    return link
+  }, [tenantId, paymentGateways])
+
+  const updatePaymentLink = useCallback(async (id: string, patch: { status?: string; paidAt?: string }) => {
+    setPaymentLinks((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }, [])
+
+  const sendPaymentLink = useCallback(async (_id: string, _message?: string) => {
+    // mock: no-op
+  }, [])
+
+  const createInvoice = useCallback(async (data: { contactId: string; dealId?: string; items: { description: string; qty: number; unitPrice: number }[]; currency?: string; dueDate?: string; notes?: string; taxPct?: number }) => {
+    const subtotal = data.items.reduce((s, i) => s + i.qty * i.unitPrice, 0)
+    const tax = data.taxPct ? Math.round(subtotal * (data.taxPct / 100) * 100) / 100 : 0
+    const inv: Invoice = { id: `inv${Date.now()}`, tenantId, contactId: data.contactId, dealId: data.dealId || null, items: data.items, subtotal, tax, total: subtotal + tax, currency: data.currency || 'USD', dueDate: data.dueDate || null, notes: data.notes || '', status: 'draft', paidAt: null, createdAt: new Date().toISOString() }
+    setInvoices((prev) => [...prev, inv])
+    return inv
+  }, [tenantId])
+
+  const updateInvoice = useCallback(async (id: string, patch: { status?: string; paidAt?: string; notes?: string; dueDate?: string }) => {
+    setInvoices((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }, [])
+
+  const deleteInvoice = useCallback(async (id: string) => {
+    setInvoices((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
   const value: PortalState = {
     currentUser: null,
     logout,
@@ -332,6 +460,13 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     products: products.filter((x) => x.tenantId === tenantId),
     campaigns: campaigns.filter((x) => x.tenantId === tenantId),
     intents: intents.filter((x) => x.tenantId === tenantId),
+    pipelineStages: pipelineStages.filter((x) => x.tenantId === tenantId),
+    deals: deals.filter((x) => x.tenantId === tenantId),
+    appointmentTypes: appointmentTypes.filter((x) => x.tenantId === tenantId),
+    appointments: appointments.filter((x) => x.tenantId === tenantId),
+    paymentGateways: paymentGateways.filter((x) => x.tenantId === tenantId),
+    paymentLinks: paymentLinks.filter((x) => x.tenantId === tenantId),
+    invoices: invoices.filter((x) => x.tenantId === tenantId),
     loading,
     messagesFor,
     ensureMessages,
@@ -368,6 +503,27 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     updateIntent,
     deleteIntent,
     testIntent,
+    createStage,
+    updateStage,
+    deleteStage,
+    createDeal,
+    updateDeal,
+    deleteDeal,
+    createAppointmentType,
+    updateAppointmentType,
+    deleteAppointmentType,
+    createAppointment,
+    updateAppointment,
+    deleteAppointment,
+    createPaymentGateway,
+    updatePaymentGateway,
+    deletePaymentGateway,
+    createPaymentLink,
+    updatePaymentLink,
+    sendPaymentLink,
+    createInvoice,
+    updateInvoice,
+    deleteInvoice,
     createTenant,
     updateTenant,
     deleteTenant,

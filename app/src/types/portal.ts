@@ -83,6 +83,7 @@ export interface Message {
   senderName?: string
   body: string
   type: 'text' | 'image' | 'audio' | 'document' | 'video'
+  mediaUrl?: string | null
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
   byBot: boolean
   timestamp: string
@@ -175,7 +176,8 @@ export interface KbArticle {
   tenantId: string
   title: string
   category: string
-  content: string
+  body: string
+  content?: string  // legacy alias — prefer body
 }
 
 // ─── Product Catalog ─────────────────────────────────────────────────────────
@@ -220,6 +222,119 @@ export interface Campaign {
   trackingCode: string    // unique short code embedded in welcome message
   active: boolean
   leads: number           // contacts attributed to this campaign
+  createdAt: string
+}
+
+// ─── Pipeline / Deal Stages ──────────────────────────────────────────────────
+export interface PipelineStage {
+  id: string
+  tenantId: string
+  name: string
+  color: string
+  order: number
+}
+
+export interface Deal {
+  id: string
+  tenantId: string
+  contactId: string
+  stageId: string
+  title: string
+  value: number
+  currency: string
+  assigneeId?: string | null
+  notes: string
+  createdAt: string
+  updatedAt: string
+  closedAt?: string | null
+  outcome?: 'won' | 'lost' | null
+}
+
+// ─── Booking / Appointments ──────────────────────────────────────────────────
+export interface AppointmentType {
+  id: string
+  tenantId: string
+  name: string
+  duration: number  // minutes
+  price: number
+  currency: string
+  description: string
+  active: boolean
+}
+
+export type AppointmentStatus = 'confirmed' | 'pending' | 'cancelled' | 'completed'
+
+export interface Appointment {
+  id: string
+  tenantId: string
+  contactId: string
+  appointmentTypeId: string
+  date: string       // YYYY-MM-DD
+  time: string       // HH:MM
+  status: AppointmentStatus
+  notes: string
+  sessionId?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Payment Gateways ─────────────────────────────────────────────────────────
+export type PaymentProvider = 'stripe' | 'paypal'
+
+export interface PaymentGateway {
+  id: string
+  tenantId: string
+  provider: PaymentProvider
+  name: string
+  publicKey?: string
+  hasSecretKey: boolean  // frontend never sees the actual secret
+  webhookSecret?: string
+  live: boolean
+  active: boolean
+  createdAt: string
+}
+
+export type PaymentLinkStatus = 'active' | 'paid' | 'expired' | 'cancelled' | 'failed'
+
+export interface PaymentLink {
+  id: string
+  tenantId: string
+  contactId: string
+  dealId?: string | null
+  gatewayId: string
+  provider: PaymentProvider
+  amount: number
+  currency: string
+  description: string
+  status: PaymentLinkStatus
+  url: string | null
+  expiresAt: string
+  paidAt?: string | null
+  createdAt: string
+}
+
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue'
+
+export interface InvoiceItem {
+  description: string
+  qty: number
+  unitPrice: number
+}
+
+export interface Invoice {
+  id: string
+  tenantId: string
+  contactId: string
+  dealId?: string | null
+  items: InvoiceItem[]
+  subtotal: number
+  tax: number
+  total: number
+  currency: string
+  dueDate?: string | null
+  notes: string
+  status: InvoiceStatus
+  paidAt?: string | null
   createdAt: string
 }
 

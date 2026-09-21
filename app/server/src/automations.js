@@ -109,15 +109,15 @@ async function execAction(rule, ctx, broadcast) {
       upsert('contacts', contact)
       broadcast({ type: 'contact', contact })
     }
-  } else if (rule.action === 'assign-agent' && rule.actionTarget) {
+  } else if (rule.action === 'assign-agent' && rule.actionTarget && conv) {
     conv.assigneeId = rule.actionTarget
     upsert('conversations', conv)
     broadcast({ type: 'conversation', conversation: conv })
-  } else if (rule.action === 'set-status' && rule.actionTarget) {
+  } else if (rule.action === 'set-status' && rule.actionTarget && conv) {
     conv.status = rule.actionTarget
     upsert('conversations', conv)
     broadcast({ type: 'conversation', conversation: conv })
-  } else if (rule.action === 'resolve-conversation') {
+  } else if (rule.action === 'resolve-conversation' && conv) {
     conv.status = 'resolved'
     upsert('conversations', conv)
     broadcast({ type: 'conversation', conversation: conv })
@@ -125,7 +125,7 @@ async function execAction(rule, ctx, broadcast) {
     const sent = await sendText(session.id, contact.chatId, rule.actionTarget)
     const botMsg = {
       id: sent.id,
-      conversationId: conv.id,
+      conversationId: conv?.id,
       fromMe: true,
       body: rule.actionTarget,
       type: 'text',
@@ -133,9 +133,11 @@ async function execAction(rule, ctx, broadcast) {
       byBot: true,
       timestamp: sent.timestamp,
     }
-    upsert('messages', botMsg)
-    conv.lastMessage = botMsg
-    conv.updatedAt = botMsg.timestamp
+    if (conv) {
+      upsert('messages', botMsg)
+      conv.lastMessage = botMsg
+      conv.updatedAt = botMsg.timestamp
+    }
     broadcast({ type: 'message', message: botMsg, conversation: conv, contact })
   } else if (rule.action === 'set-contact-field' && rule.actionTarget) {
     // format: "field=value", e.g. "notes=VIP customer"
@@ -162,8 +164,10 @@ async function execAction(rule, ctx, broadcast) {
 
 export async function runAutomations(trigger, ctx, broadcast) {
   const { conv, contact } = ctx
+  const tenantId = conv?.tenantId ?? contact?.tenantId
+  if (!tenantId) return
   const rules = collection('automations').filter(
-    (a) => a.tenantId === conv.tenantId && a.enabled && a.trigger === trigger,
+    (a) => a.tenantId === tenantId && a.enabled && a.trigger === trigger,
   )
   if (!rules.length) return
 
@@ -171,7 +175,7 @@ export async function runAutomations(trigger, ctx, broadcast) {
     if (!evalCondition(rule, ctx)) continue
     try {
       await execAction(rule, ctx, broadcast)
-      console.log(`[automation] "${rule.name}" fired (${rule.action}) on conv ${conv.id}`)
+      console.log(`[automation] "${rule.name}" fired (${rule.action})${conv ? ` on conv ${conv.id}` : ` for contact ${contact?.id}`}`)
     } catch (e) {
       console.error(`[automation] "${rule.name}" error:`, e.message)
     }

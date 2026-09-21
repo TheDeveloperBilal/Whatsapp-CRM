@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { Plus, Smartphone, QrCode, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react'
+import { Plus, Smartphone, QrCode, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -60,7 +60,7 @@ export default function Sessions() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">WhatsApp Sessions</h2>
@@ -78,7 +78,7 @@ export default function Sessions() {
               <DialogTitle>Create session</DialogTitle>
               <DialogDescription>
                 {live
-                  ? 'Creates a Baileys session on the local backend — then connect it and scan the QR with your phone.'
+                  ? 'Creates a WhatsApp session — connect it and scan the QR code with your phone.'
                   : 'Pick an engine, then scan the QR to link the number.'}
               </DialogDescription>
             </DialogHeader>
@@ -93,9 +93,9 @@ export default function Sessions() {
                   <Select value={engine} onValueChange={setEngine}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="whatsapp-web.js">whatsapp-web.js — lower ban risk, ~300–500 MB RAM</SelectItem>
-                      <SelectItem value="baileys">baileys — light, ~30–80 MB RAM, higher ban risk</SelectItem>
-                      <SelectItem value="cloud-api">Meta Cloud API — official, per-message cost</SelectItem>
+                      <SelectItem value="whatsapp-web.js">whatsapp-web.js</SelectItem>
+                      <SelectItem value="baileys">baileys</SelectItem>
+                      <SelectItem value="cloud-api">Meta Cloud API</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -118,15 +118,7 @@ export default function Sessions() {
         </Dialog>
       </div>
 
-      <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-        <ShieldAlert className="size-5 shrink-0" />
-        <p>
-          Baileys is an unofficial WhatsApp Web client — there is always a non-zero ban risk. Use a
-          dedicated number if possible, keep volumes human-like, and never cold-blast strangers.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sessions.map((s) => (
           <Card key={s.id}>
             <CardHeader className="pb-3">
@@ -196,3 +188,4 @@ export default function Sessions() {
     </div>
   )
 }
+

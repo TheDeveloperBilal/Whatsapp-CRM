@@ -1,120 +1,199 @@
 import { useState } from 'react'
-import { Plug, Save } from 'lucide-react'
+import { KeyRound, Building2, Clock, Eye, EyeOff, Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { usePortal } from '@/lib/store'
-import { DEFAULT_BACKEND_URL } from '@/lib/backend'
-import type { GatewayKind } from '@/types/portal'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
+import { loadProfile } from '@/lib/gateway'
 
-const options: Array<{ value: GatewayKind; title: string; desc: string; defaultUrl: string }> = [
-  {
-    value: 'portal',
-    title: 'Portal backend (recommended, live)',
-    desc: 'The built-in local backend: Baileys WhatsApp engine + AI auto-responder + WebSocket events. Starts automatically with npm run dev.',
-    defaultUrl: DEFAULT_BACKEND_URL || 'http://localhost:8787',
-  },
-  {
-    value: 'mock',
-    title: 'Demo mode (built-in mock)',
-    desc: 'Fully working demo data with simulated inbound messages. No real WhatsApp needed.',
-    defaultUrl: '',
-  },
-  {
-    value: 'openwa',
-    title: 'OpenWA (direct, partial)',
-    desc: 'Experimental: talk straight to an external OpenWA gateway. Session list/connect only.',
-    defaultUrl: 'http://localhost:2785',
-  },
-  {
-    value: 'evolution',
-    title: 'Evolution API (direct, partial)',
-    desc: 'Experimental: talk straight to an external Evolution API. Instance list/connect only.',
-    defaultUrl: 'http://localhost:8080',
-  },
-]
+const client = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
 
 export default function Settings() {
-  const { profile, updateProfile } = usePortal()
-  const [kind, setKind] = useState<GatewayKind>(profile.kind)
-  const [baseUrl, setBaseUrl] = useState(profile.baseUrl)
-  const [apiKey, setApiKey] = useState(profile.apiKey)
+  const { currentUser, tenant, botConfig, updateBotConfig, updateTenant } = usePortal()
+
+  // ── Change password ──────────────────────────────────────────────────────────
+  const [oldPw, setOldPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [pwSaving, setPwSaving] = useState(false)
+
+  const savePassword = async () => {
+    if (!oldPw || !newPw) return
+    if (newPw !== confirmPw) { toast.error('New passwords do not match'); return }
+    if (newPw.length < 8) { toast.error('New password must be at least 8 characters'); return }
+    setPwSaving(true)
+    try {
+      await client.changePassword(oldPw, newPw)
+      toast.success('Password changed successfully')
+      setOldPw(''); setNewPw(''); setConfirmPw('')
+    } catch {
+      toast.error('Wrong current password')
+    } finally {
+      setPwSaving(false)
+    }
+  }
+
+  // ── Business profile ─────────────────────────────────────────────────────────
+  const [bizName, setBizName] = useState(tenant?.name ?? '')
+  const [bizSaving, setBizSaving] = useState(false)
+  const isOwnerOrAdmin = currentUser?.role === 'owner' || currentUser?.role === 'superadmin'
+
+  const saveBizName = async () => {
+    if (!bizName.trim() || !tenant?.id) return
+    setBizSaving(true)
+    try {
+      await updateTenant(tenant.id, { name: bizName.trim() })
+      toast.success('Business name updated')
+    } catch {
+      toast.error('Failed to update business name')
+    } finally {
+      setBizSaving(false)
+    }
+  }
+
+  // ── Business hours ───────────────────────────────────────────────────────────
+  const hoursOnly = botConfig?.businessHoursOnly ?? false
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-2xl">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">
-          Choose where the portal gets its WhatsApp data. The built-in backend covers the full CRM;
-          direct gateway modes are integration seams for later.
-        </p>
+        <p className="text-muted-foreground">Manage your account and workspace preferences.</p>
       </div>
 
+      {/* ── Account ── */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plug className="size-5" /> Backend connection
+          <CardTitle className="flex items-center gap-2 text-base">
+            <KeyRound className="size-4" /> Account
           </CardTitle>
           <CardDescription>
-            AI replies need an LLM key: set <code>AI_API_KEY</code> (and optionally{' '}
-            <code>AI_BASE_URL</code> / <code>AI_MODEL</code>) in <code>app/.env</code> and restart.
+            Signed in as <span className="font-medium text-foreground">{currentUser?.username}</span>
+            {' '}· <span className="capitalize">{currentUser?.role}</span>
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <RadioGroup
-            value={kind}
-            onValueChange={(v) => {
-              const k = v as GatewayKind
-              setKind(k)
-              setBaseUrl(options.find((o) => o.value === k)?.defaultUrl ?? '')
-            }}
-            className="space-y-3"
-          >
-            {options.map((o) => (
-              <label
-                key={o.value}
-                className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 ${kind === o.value ? 'border-primary' : ''}`}
-              >
-                <RadioGroupItem value={o.value} className="mt-1" />
-                <span>
-                  <span className="block font-medium">{o.title}</span>
-                  <span className="block text-sm text-muted-foreground">{o.desc}</span>
-                </span>
-              </label>
-            ))}
-          </RadioGroup>
-
-          {kind !== 'mock' && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Base URL</Label>
-                <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://localhost:8787" />
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>Current password</Label>
+              <div className="relative">
+                <Input
+                  type={showPw ? 'text' : 'password'}
+                  value={oldPw}
+                  onChange={e => setOldPw(e.target.value)}
+                  placeholder="••••••••"
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(p => !p)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPw ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
               </div>
-              {kind !== 'portal' && (
-                <div className="space-y-1.5">
-                  <Label>API key</Label>
-                  <Input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={kind === 'openwa' ? 'X-API-Key' : 'apikey'}
-                  />
-                </div>
-              )}
             </div>
-          )}
-
+            <div className="space-y-1.5">
+              <Label>New password</Label>
+              <Input
+                type={showPw ? 'text' : 'password'}
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                placeholder="Min 8 characters"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Confirm new password</Label>
+              <Input
+                type={showPw ? 'text' : 'password'}
+                value={confirmPw}
+                onChange={e => setConfirmPw(e.target.value)}
+                placeholder="Repeat new password"
+              />
+            </div>
+          </div>
           <Button
-            onClick={() => {
-              updateProfile({ kind, baseUrl, apiKey })
-              toast.success('Backend profile saved', { description: `Mode: ${kind}` })
-            }}
+            size="sm"
+            onClick={savePassword}
+            disabled={pwSaving || !oldPw || !newPw || !confirmPw}
           >
-            <Save className="mr-1 size-4" /> Save & reconnect
+            {pwSaving
+              ? <><Loader2 className="mr-1 size-3.5 animate-spin" /> Saving…</>
+              : <><Check className="mr-1 size-3.5" /> Change password</>
+            }
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* ── Business Profile ── */}
+      {isOwnerOrAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Building2 className="size-4" /> Business Profile
+            </CardTitle>
+            <CardDescription>
+              Your workspace name shown across the portal.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3 items-end">
+              <div className="flex-1 space-y-1.5">
+                <Label>Business name</Label>
+                <Input
+                  value={bizName}
+                  onChange={e => setBizName(e.target.value)}
+                  placeholder="e.g. OviTech Global"
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={saveBizName}
+                disabled={bizSaving || !bizName.trim() || bizName.trim() === tenant?.name}
+              >
+                {bizSaving
+                  ? <Loader2 className="size-3.5 animate-spin" />
+                  : <><Check className="mr-1 size-3.5" /> Save</>
+                }
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Business Hours ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Clock className="size-4" /> Business Hours
+          </CardTitle>
+          <CardDescription>
+            When this is on, the AI only replies between 8 am and 9 pm. Outside those hours
+            customers get your fallback message instead.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Restrict AI to business hours</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {hoursOnly ? 'Active — AI replies 8 am–9 pm only' : 'Off — AI replies 24/7'}
+              </p>
+            </div>
+            <Switch
+              checked={hoursOnly}
+              onCheckedChange={v => {
+                updateBotConfig({ businessHoursOnly: v })
+                toast.success(v ? 'AI restricted to business hours' : 'AI set to reply 24/7')
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

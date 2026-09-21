@@ -1,0 +1,14 @@
+app/node_modules
+app/dist
+app/src
+app/server/data
+app/.env
+app/index.html
+app/vite.config.ts
+app/tsconfig*.json
+app/postcss.config.js
+app/tailwind.config.js
+app/components.json
+.git
+.gitignore
+*.md

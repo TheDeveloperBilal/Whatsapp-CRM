@@ -13,6 +13,13 @@ import type {
   BotConfig,
   AutomationRule,
   IntentRule,
+  PipelineStage,
+  Deal,
+  AppointmentType,
+  Appointment,
+  PaymentGateway,
+  PaymentLink,
+  Invoice,
   CannedResponse,
   KbArticle,
   Product,
@@ -50,6 +57,13 @@ export interface PortalState {
   products: Product[]
   campaigns: Campaign[]
   intents: IntentRule[]
+  pipelineStages: PipelineStage[]
+  deals: Deal[]
+  appointmentTypes: AppointmentType[]
+  appointments: Appointment[]
+  paymentGateways: PaymentGateway[]
+  paymentLinks: PaymentLink[]
+  invoices: Invoice[]
   loading: boolean
   // actions
   messagesFor: (conversationId: string) => Message[]
@@ -93,6 +107,30 @@ export interface PortalState {
   updateIntent: (id: string, patch: Partial<IntentRule>) => Promise<void>
   deleteIntent: (id: string) => Promise<void>
   testIntent: (message: string) => Promise<IntentRule | null>
+  // pipeline
+  createStage: (data: { name: string; color: string }) => Promise<PipelineStage>
+  updateStage: (id: string, patch: Partial<PipelineStage>) => Promise<void>
+  deleteStage: (id: string) => Promise<void>
+  createDeal: (data: Omit<Deal, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) => Promise<Deal>
+  updateDeal: (id: string, patch: Partial<Deal>) => Promise<void>
+  deleteDeal: (id: string) => Promise<void>
+  // booking
+  createAppointmentType: (data: Omit<AppointmentType, 'id' | 'tenantId'>) => Promise<AppointmentType>
+  updateAppointmentType: (id: string, patch: Partial<AppointmentType>) => Promise<void>
+  deleteAppointmentType: (id: string) => Promise<void>
+  createAppointment: (data: Omit<Appointment, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>) => Promise<Appointment>
+  updateAppointment: (id: string, patch: Partial<Appointment>) => Promise<void>
+  deleteAppointment: (id: string) => Promise<void>
+  // payments
+  createPaymentGateway: (data: { provider: string; name: string; secretKey: string; publicKey?: string; webhookSecret?: string; live?: boolean }) => Promise<PaymentGateway>
+  updatePaymentGateway: (id: string, patch: { name?: string; secretKey?: string; publicKey?: string; live?: boolean; active?: boolean }) => Promise<void>
+  deletePaymentGateway: (id: string) => Promise<void>
+  createPaymentLink: (data: { contactId: string; dealId?: string; amount: number; currency: string; description: string; gatewayId: string }) => Promise<PaymentLink>
+  updatePaymentLink: (id: string, patch: { status?: string; paidAt?: string }) => Promise<void>
+  sendPaymentLink: (id: string, message?: string) => Promise<void>
+  createInvoice: (data: { contactId: string; dealId?: string; items: { description: string; qty: number; unitPrice: number }[]; currency?: string; dueDate?: string; notes?: string; taxPct?: number }) => Promise<Invoice>
+  updateInvoice: (id: string, patch: { status?: string; paidAt?: string; notes?: string; dueDate?: string }) => Promise<void>
+  deleteInvoice: (id: string) => Promise<void>
   // tenant management (superadmin)
   createTenant: (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => Promise<Tenant>
   updateTenant: (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => Promise<void>
