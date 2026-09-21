@@ -183,3 +183,10 @@ export function remove(name, predicate) {
 }
 
 export const uid = (p) => `${p}${crypto.randomBytes(5).toString('hex')}`
+
+// Replace the entire in-memory database and persist to disk immediately.
+// Used by the admin DB-import endpoint to migrate data from another environment.
+export function importDb(newDb) {
+  Object.keys(newDb).forEach((k) => { db[k] = newDb[k] })
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2))
+}

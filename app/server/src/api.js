@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Router } from 'express'
-import { collection, upsert, remove, uid, save, MEDIA_DIR } from './db.js'
+import { collection, upsert, remove, uid, save, importDb, MEDIA_DIR } from './db.js'
 import { startSession, stopSession, sendText } from './wa.js'
 import { aiStatus } from './bot.js'
 import { runAutomations } from './automations.js'
@@ -89,6 +89,19 @@ export function buildApi(broadcast) {
 
   // All routes below require auth
   r.use(requireAuth)
+
+  // ── Admin DB import (superadmin only) ────────────────────────────────────────
+  r.post('/admin/db-import', (req, res) => {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'superadmin only' })
+    const { db } = req.body
+    if (!db || typeof db !== 'object') return res.status(400).json({ error: 'body.db required' })
+    try {
+      importDb(db)
+      res.json({ ok: true, message: 'Database imported. Reload the page.' })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
 
   r.get('/tenants', (req, res) => {
     const tenants = collection('tenants')
