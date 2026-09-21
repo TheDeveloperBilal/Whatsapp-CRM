@@ -210,6 +210,16 @@ export function buildApi(broadcast) {
     res.json({ ok: true })
   })
 
+  r.patch('/tenants/:tid/users/:uid/password', requireSuperAdmin, (req, res) => {
+    const { newPassword } = req.body
+    if (!newPassword) return res.status(400).json({ error: 'newPassword required' })
+    const user = collection('users').find((u) => u.id === req.params.uid && u.tenantId === req.params.tid)
+    if (!user) return res.status(404).json({ error: 'not found' })
+    user.passwordHash = hashPassword(newPassword)
+    save()
+    res.json({ ok: true })
+  })
+
   r.post('/auth/change-password', (req, res) => {
     const { oldPassword, newPassword } = req.body
     const user = collection('users').find((u) => u.id === req.user.userId)
