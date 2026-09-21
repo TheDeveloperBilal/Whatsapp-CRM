@@ -1,9 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install --omit=dev --ignore-scripts"
+buildCommand = "cd app && npm install --omit=dev --ignore-scripts"
 
 [deploy]
-startCommand = "node server/src/index.js"
+startCommand = "cd app && node server/src/index.js"
 healthcheckPath = "/api/tenants"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
