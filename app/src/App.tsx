@@ -22,6 +22,8 @@ import KnowledgeBase from '@/pages/KnowledgeBase'
 import Tenants from '@/pages/Tenants'
 import Settings from '@/pages/Settings'
 import SystemConfig from '@/pages/SystemConfig'
+import Workflows from '@/pages/Workflows'
+import WorkflowBuilder from '@/pages/WorkflowBuilder'
 import Login from '@/pages/Login'
 import { isLoggedIn } from '@/lib/auth'
 
@@ -70,7 +72,9 @@ export default function App() {
           <Route path="/tenants" element={<Tenants />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/system-config" element={<SystemConfig />} />
+          <Route path="/workflows" element={<Workflows />} />
         </Route>
+        <Route path="/workflows/:id" element={<WorkflowBuilder />} />
       </Routes>
       <Toaster position="bottom-right" />
     </PortalProvider>

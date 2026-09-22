@@ -28,6 +28,8 @@ import type {
   Campaign,
   AuthUser,
   DashboardStats,
+  Workflow,
+  WorkflowRun,
 } from '@/types/portal'
 import { getToken, clearToken } from '@/lib/auth'
 
@@ -418,6 +420,29 @@ export class PortalClient {
       `/tenants/${tenantId}/broadcast`,
       { method: 'POST', body: JSON.stringify({ message, contactIds }) },
     )
+  }
+
+  // ── Workflows ──
+  workflows(tenantId: string) {
+    return this.req<Workflow[]>(`/tenants/${tenantId}/workflows`)
+  }
+  createWorkflow(tenantId: string, data: Partial<Workflow>) {
+    return this.req<Workflow>(`/tenants/${tenantId}/workflows`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateWorkflow(tenantId: string, id: string, data: Partial<Workflow>) {
+    return this.req<Workflow>(`/tenants/${tenantId}/workflows/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+  toggleWorkflow(tenantId: string, id: string) {
+    return this.req<Workflow>(`/tenants/${tenantId}/workflows/${id}/toggle`, { method: 'PATCH' })
+  }
+  deleteWorkflow(tenantId: string, id: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/workflows/${id}`, { method: 'DELETE' })
+  }
+  workflowRuns(tenantId: string, workflowId: string) {
+    return this.req<WorkflowRun[]>(`/tenants/${tenantId}/workflows/${workflowId}/runs`)
+  }
+  triggerWorkflow(tenantId: string, workflowId: string, context?: Record<string, any>) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/workflows/${workflowId}/trigger`, { method: 'POST', body: JSON.stringify({ context }) })
   }
 
   connect(onEvent: (e: ServerEvent) => void): () => void {

@@ -7,6 +7,7 @@ import { startSession, stopSession, sendText } from './wa.js'
 import { aiStatus } from './bot.js'
 import { runAutomations } from './automations.js'
 import { runIntentRouting } from './intents.js'
+import { fireTrigger, runWorkflow } from './workflow-engine.js'
 import {
   checkPassword,
   hashPassword,
@@ -713,6 +714,7 @@ export function buildApi(broadcast) {
             campaign.leads = (campaign.leads || 0) + 1
             save()
             broadcast({ type: 'contact', contact })
+            fireTrigger(campaign.tenantId, 'contact.created', { contactId: contact.id })
           }
         }
       }
@@ -1079,6 +1081,80 @@ export function buildApi(broadcast) {
       }
     }
     res.json({ sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results })
+  })
+
+  // ── Workflows ──────────────────────────────────────────────────────────────
+  r.get('/tenants/:tid/workflows', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json(collection('workflows').filter(w => w.tenantId === req.params.tid))
+  })
+
+  r.post('/tenants/:tid/workflows', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const wf = {
+      id: uid('wf'),
+      tenantId: req.params.tid,
+      name: req.body.name || 'Untitled Workflow',
+      description: req.body.description || '',
+      enabled: false,
+      nodes: req.body.nodes || [],
+      edges: req.body.edges || [],
+      triggerType: req.body.triggerType || 'manual',
+      triggerConfig: req.body.triggerConfig || {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      runCount: 0,
+    }
+    upsert('workflows', wf)
+    save()
+    broadcast({ type: 'workflow', workflow: wf })
+    res.json(wf)
+  })
+
+  r.put('/tenants/:tid/workflows/:wid', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
+    if (!wf) return res.status(404).json({ error: 'not found' })
+    Object.assign(wf, { ...req.body, id: wf.id, tenantId: wf.tenantId, updatedAt: new Date().toISOString() })
+    save()
+    broadcast({ type: 'workflow', workflow: wf })
+    res.json(wf)
+  })
+
+  r.patch('/tenants/:tid/workflows/:wid/toggle', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
+    if (!wf) return res.status(404).json({ error: 'not found' })
+    wf.enabled = !wf.enabled
+    wf.updatedAt = new Date().toISOString()
+    save()
+    broadcast({ type: 'workflow', workflow: wf })
+    res.json(wf)
+  })
+
+  r.delete('/tenants/:tid/workflows/:wid', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    remove('workflows', w => w.id === req.params.wid && w.tenantId === req.params.tid)
+    save()
+    broadcast({ type: 'workflow.deleted', id: req.params.wid })
+    res.json({ ok: true })
+  })
+
+  r.get('/tenants/:tid/workflows/:wid/runs', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const runs = collection('workflowRuns')
+      .filter(r => r.workflowId === req.params.wid)
+      .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+      .slice(0, 50)
+    res.json(runs)
+  })
+
+  r.post('/tenants/:tid/workflows/:wid/trigger', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
+    if (!wf) return res.status(404).json({ error: 'not found' })
+    runWorkflow(wf, req.body.context || {}).catch(console.error)
+    res.json({ ok: true, message: 'Workflow triggered' })
   })
 
   return r

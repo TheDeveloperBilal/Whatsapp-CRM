@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { getGateway } from '@/lib/gateway'
 import type { WhatsAppGateway } from '@/lib/gateway/types'
 import type { TenantUser } from '@/lib/backend'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
 import { PortalCtx } from '@/lib/portal-context'
 import type { PortalState } from '@/lib/portal-state'
 import {
@@ -55,6 +56,7 @@ interface Props {
 }
 
 export function MockProvider({ children, profile, updateProfile }: Props) {
+  const client = useMemo(() => new PortalClient(profile.baseUrl || DEFAULT_BACKEND_URL), [profile.baseUrl])
   const gatewayRef = useRef<WhatsAppGateway>(getGateway(profile))
   const [gatewayKind, setGatewayKind] = useState(gatewayRef.current.kind)
 
@@ -438,6 +440,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   }, [])
 
   const value: PortalState = {
+    client,
     currentUser: null,
     logout,
     tenants,

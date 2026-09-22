@@ -911,6 +911,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   }
 
   const value: PortalState = {
+    client,
     currentUser,
     logout,
     tenants,

@@ -84,7 +84,13 @@ export class MockAdapter implements WhatsAppGateway {
       avgFirstResponseMin: 1.8,
       activeSessions: sess.filter((s) => s.status === 'connected').length,
       botHandledPct: msgs.length ? Math.round((botMsgs / msgs.length) * 100) : 0,
-      volume7d: msgs.length,
+      volume7d: Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(Date.now() - (6 - i) * 86400000)
+        const day = d.toISOString().slice(0, 10)
+        const dayMsgs = msgs.filter(m => m.timestamp.slice(0, 10) === day)
+        const bot = dayMsgs.filter(m => m.byBot).length
+        return { day, bot, human: dayMsgs.length - bot }
+      }),
     }
   }
 

@@ -362,3 +362,77 @@ export interface DashboardStats {
   botHandledPct: number
   volume7d: VolumeDay[]
 }
+
+// ─── Workflow Builder ──────────────────────────────────────────────────────────
+export type WorkflowTriggerType =
+  | 'contact.created' | 'tag.added' | 'tag.removed'
+  | 'message.received' | 'message.first'
+  | 'conversation.resolved' | 'conversation.opened'
+  | 'appointment.booked' | 'appointment.cancelled'
+  | 'payment.received' | 'deal.stage_changed'
+  | 'form.submitted' | 'manual'
+
+export type WorkflowActionType =
+  | 'send_message' | 'wait' | 'if_else'
+  | 'add_tag' | 'remove_tag'
+  | 'assign_agent' | 'unassign_agent'
+  | 'set_contact_field' | 'create_note'
+  | 'move_deal_stage' | 'create_deal'
+  | 'add_to_campaign' | 'remove_from_campaign'
+  | 'send_webhook' | 'end'
+
+export interface WorkflowNodeData {
+  label: string
+  nodeType: 'trigger' | 'action' | 'condition' | 'wait' | 'end'
+  actionType?: WorkflowActionType
+  triggerType?: WorkflowTriggerType
+  config: Record<string, any>
+  description?: string
+}
+
+export interface WorkflowNode {
+  id: string
+  type: string
+  position: { x: number; y: number }
+  data: WorkflowNodeData
+}
+
+export interface WorkflowEdge {
+  id: string
+  source: string
+  target: string
+  sourceHandle?: string | null
+  targetHandle?: string | null
+  label?: string
+}
+
+export interface Workflow {
+  id: string
+  tenantId: string
+  name: string
+  description?: string
+  enabled: boolean
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  triggerType: WorkflowTriggerType
+  triggerConfig: Record<string, any>
+  createdAt: string
+  updatedAt: string
+  runCount: number
+  lastRunAt?: string
+}
+
+export interface WorkflowRun {
+  id: string
+  workflowId: string
+  tenantId: string
+  status: 'running' | 'completed' | 'failed' | 'waiting'
+  contactId?: string
+  conversationId?: string
+  currentNodeId?: string
+  context: Record<string, any>
+  log: { nodeId: string; action: string; at: string; result?: string }[]
+  startedAt: string
+  completedAt?: string
+  error?: string
+}

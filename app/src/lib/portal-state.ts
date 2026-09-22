@@ -28,9 +28,11 @@ import type {
   DashboardStats,
   ConversationStatus,
 } from '@/types/portal'
-import type { TenantUser } from '@/lib/backend'
+import type { TenantUser, PortalClient } from '@/lib/backend'
 
 export interface PortalState {
+  // backend client (for workflow and other direct API calls)
+  client: PortalClient
   // auth
   currentUser: AuthUser | null
   logout: () => void
