@@ -56,10 +56,17 @@ function parseCsv(text: string): CsvRow[] {
   }).filter((r) => r.phone)
 }
 
+// A contact whose name is just a phone number (starts with '+') and has no real name
+// is a WhatsApp LID contact — hide from the list by default.
+function hasRealName(c: Contact) {
+  return c.name && !c.name.startsWith('+') && c.name !== 'Unknown'
+}
+
 export default function Contacts() {
   const { contacts, tags, saveContactNote, tenant } = usePortal()
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState<Contact | null>(null)
+  const [showUnknown, setShowUnknown] = useState(false)
   // CSV import
   const fileRef = useRef<HTMLInputElement>(null)
   const [csvDialog, setCsvDialog] = useState(false)
@@ -96,12 +103,16 @@ export default function Contacts() {
     }
   }
 
+  const identified = useMemo(() => showUnknown ? contacts : contacts.filter(hasRealName), [contacts, showUnknown])
+
   const filtered = useMemo(() => {
     const needle = q.toLowerCase()
-    return contacts.filter(
-      (c) => c.name.toLowerCase().includes(needle) || c.phone.includes(needle),
+    return identified.filter(
+      (c) => c.name.toLowerCase().includes(needle) || (c.phone || '').includes(needle),
     )
-  }, [contacts, q])
+  }, [identified, q])
+
+  const unknownCount = contacts.length - contacts.filter(hasRealName).length
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -112,7 +123,15 @@ export default function Contacts() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Contacts</h2>
           <p className="text-muted-foreground">
-            CRM records synced from WhatsApp conversations. {contacts.length} total.
+            {contacts.filter(hasRealName).length} identified contacts
+            {unknownCount > 0 && (
+              <button
+                onClick={() => setShowUnknown(v => !v)}
+                className="ml-2 text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground"
+              >
+                {showUnknown ? `hide ${unknownCount} unidentified` : `+ ${unknownCount} unidentified`}
+              </button>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -156,7 +175,7 @@ export default function Contacts() {
                     <span className="font-medium">{c.name}</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{c.phone}</TableCell>
+                <TableCell className="text-muted-foreground">{c.phone || '—'}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {c.tags.map((tid) => {
@@ -260,7 +279,7 @@ export default function Contacts() {
               <SheetHeader>
                 <SheetTitle>{selected.name}</SheetTitle>
                 <SheetDescription>
-                  {selected.phone} · chat id <code>{selected.chatId}</code>
+                  {selected.phone || 'No phone'} · chat id <code className="text-xs">{selected.chatId}</code>
                 </SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-4">

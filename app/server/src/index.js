@@ -101,9 +101,13 @@ if (process.env.NODE_ENV === 'production') {
 
 // Extract a clean E.164 phone from a Baileys JID.
 // JIDs can be: 923215474380875@s.whatsapp.net or 923215474380875:0@s.whatsapp.net
+// WhatsApp LIDs (Linked Device IDs) look like 14-15+ digit numbers and are NOT real
+// phone numbers — real E.164 numbers max out at 13 digits (country code + number).
+// Returns null for LIDs so the caller can decide how to handle them.
 function phoneFromJid(jid) {
   const user = jid.split('@')[0].split(':')[0] // strip @domain and :device suffix
   const digits = user.replace(/\D/g, '')       // digits only
+  if (digits.length < 7 || digits.length > 13) return null  // LID or invalid — not a real phone
   return `+${digits}`
 }
 
@@ -111,12 +115,12 @@ function conversationFor(session, jid, pushName) {
   const tenantId = session.tenantId
   let contact = collection('contacts').find((c) => c.tenantId === tenantId && c.chatId === jid)
   if (!contact) {
-    const phone = phoneFromJid(jid)
+    const phone = phoneFromJid(jid)  // null if WhatsApp LID
     contact = {
       id: uid('c'),
       tenantId,
-      name: pushName || phone,
-      phone,
+      name: pushName || phone || 'Unknown',
+      phone: phone ?? '',
       chatId: jid,
       avatarHue: Math.floor(Math.random() * 360),
       tags: ['tag2'],
@@ -309,10 +313,14 @@ waEvents.on('history', ({ sessionId, contacts }) => {
   const session = collection('sessions').find((s) => s.id === sessionId)
   if (!session) return
   let n = 0
+  let skippedLid = 0
   for (const c of contacts || []) {
     const jid = c.id
     if (!jid || jid === 'status@broadcast' || jid.endsWith('@newsletter') || jid.endsWith('@g.us')) continue
-    const phone = phoneFromJid(jid)
+    const phone = phoneFromJid(jid)  // null if WhatsApp LID (14+ digit internal ID)
+    const name = c.name || c.notify  // real name from phone book, if any
+    // Skip LID contacts with no real name — they produce garbage "phone" entries
+    if (!phone && !name) { skippedLid++; continue }
     const existingContact = collection('contacts').find(
       (x) => x.tenantId === session.tenantId && x.chatId === jid,
     )
@@ -320,8 +328,8 @@ waEvents.on('history', ({ sessionId, contacts }) => {
       upsert('contacts', {
         id: uid('c'),
         tenantId: session.tenantId,
-        name: c.name || c.notify || phone,
-        phone,
+        name: name || phone,
+        phone: phone ?? '',
         chatId: jid,
         avatarHue: Math.floor(Math.random() * 360),
         tags: [],
@@ -331,7 +339,7 @@ waEvents.on('history', ({ sessionId, contacts }) => {
       n++
     }
   }
-  if (n) console.log(`history sync: imported ${n} contacts for ${session.name}`)
+  if (n || skippedLid) console.log(`history sync: imported ${n} contacts, skipped ${skippedLid} LID-only contacts for ${session.name}`)
   broadcast({ type: 'contacts.synced', tenantId: session.tenantId })
 })
 

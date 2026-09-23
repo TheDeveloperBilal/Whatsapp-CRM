@@ -190,7 +190,7 @@ export default function Settings() {
               <Phone className="size-4" /> Contact Phone Numbers
             </CardTitle>
             <CardDescription>
-              Re-normalize phone numbers for all existing contacts from their WhatsApp chat IDs. Run this if contact numbers look wrong or have incorrect country codes.
+              Fix existing contacts that show incorrect phone numbers. WhatsApp LID contacts (14+ digit internal IDs) will have their phone cleared. Real contacts keep their correct E.164 number.
             </CardDescription>
           </CardHeader>
           <CardContent>

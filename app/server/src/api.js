@@ -169,7 +169,9 @@ export function buildApi(broadcast) {
     res.json(t)
   })
 
-  // Re-normalize stored phone numbers for a tenant (strips :device suffix and non-digits)
+  // Re-normalize stored phone numbers for a tenant.
+  // Numbers with 14+ digits are WhatsApp LIDs (internal IDs, not real phones) — set to ''.
+  // Real E.164 phones are 7–13 digits.
   r.post('/tenants/:tid/contacts/fix-phones', (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const contacts = collection('contacts').filter((c) => c.tenantId === req.params.tid && c.chatId)
@@ -177,14 +179,15 @@ export function buildApi(broadcast) {
     for (const c of contacts) {
       const user = c.chatId.split('@')[0].split(':')[0]
       const digits = user.replace(/\D/g, '')
-      const normalized = `+${digits}`
+      // LID or invalid: too many digits to be a real phone
+      const normalized = (digits.length >= 7 && digits.length <= 13) ? `+${digits}` : ''
       if (c.phone !== normalized) {
-        c.phone = normalized
-        // also fix name if it was set to the old wrong phone
-        if (c.name && c.name.startsWith('+') && c.name !== normalized) {
-          const nameDigits = c.name.replace(/\D/g, '')
-          if (nameDigits === digits || c.name === c.phone) c.name = normalized
+        // If name was derived from the old bad phone number, clear it too
+        const oldPhone = c.phone || ''
+        if (c.name && c.name === oldPhone) {
+          c.name = normalized || 'Unknown'
         }
+        c.phone = normalized
         fixed++
       }
     }
