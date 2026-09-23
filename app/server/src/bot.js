@@ -257,16 +257,21 @@ export async function botReply(tenantId, conversation, history, inboundText) {
 
   // 2. generative AI (Gemini primary → Nvidia fallback)
   if (cfg.aiEnabled && hasAny) {
+    let aiResult = null
     try {
-      const reply = await callLLM(cfg, history, inboundText)
-      if (reply) return reply
+      aiResult = await callLLM(cfg, history, inboundText)
     } catch (e) {
       console.error('[AI] All models failed:', e.message)
     }
+    if (aiResult) return aiResult
+    // AI produced nothing — honour the configured fallback so the customer isn't left on read
+    if (cfg.fallback === 'human') return { handoff: true, message: cfg.fallbackMessage }
+    if (cfg.fallback === 'message') return cfg.fallbackMessage
+    return null
   }
 
-  // 3. fallback message
-  if (cfg.aiEnabled && !hasAny) {
+  // 3. no AI keys configured
+  if (cfg.aiEnabled) {
     return `${cfg.fallbackMessage}\n\n_(AI key not configured — add GEMINI_API_KEY or AI_API_KEY in app/.env)_`
   }
   return cfg.fallback === 'message' ? cfg.fallbackMessage : null
