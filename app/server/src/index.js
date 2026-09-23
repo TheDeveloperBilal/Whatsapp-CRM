@@ -148,6 +148,80 @@ function conversationFor(session, jid, pushName) {
   return { contact, conv }
 }
 
+// ── Per-conversation debounce: batch rapid messages before sending to AI ─────
+// When a user sends multiple messages quickly, wait BOT_DEBOUNCE_MS after the
+// last one, then pass the full conversation history to the AI so it can reply
+// to everything at once rather than firing once per message.
+const BOT_DEBOUNCE_MS = 3000
+const botDebounceTimers = new Map() // convId → timer
+
+async function fireBotForConversation(conv, session, contact) {
+  if (!conv.botEnabled) return
+  try {
+    const history = collection('messages')
+      .filter((m) => m.conversationId === conv.id)
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+
+    // Collect all consecutive inbound messages at the tail (the "burst")
+    const burstTexts = []
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].fromMe) break
+      burstTexts.unshift(history[i].body)
+    }
+    // Join burst into one prompt so the AI sees every message
+    const combinedText = burstTexts.join('\n')
+
+    const result = await botReply(conv.tenantId, conv, history, combinedText)
+
+    if (result) {
+      // Human-like typing delay: 2–5 s random
+      await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 3000))
+    }
+
+    if (result && typeof result === 'object' && result.handoff) {
+      const sent = await sendText(session.id, conv._jid, result.message)
+      const botMsg = {
+        id: sent.id,
+        conversationId: conv.id,
+        fromMe: true,
+        body: result.message,
+        type: 'text',
+        status: 'sent',
+        byBot: true,
+        timestamp: sent.timestamp,
+      }
+      upsert('messages', botMsg)
+      conv.botEnabled = false
+      conv.status = 'pending'
+      conv.lastMessage = botMsg
+      conv.updatedAt = botMsg.timestamp
+      save()
+      broadcast({ type: 'message', message: botMsg, conversation: conv, contact })
+      broadcast({ type: 'human.requested', conversation: conv, contact })
+      console.log(`[handoff] ${contact.name} requested a human agent`)
+    } else if (result) {
+      const sent = await sendText(session.id, conv._jid, result)
+      const botMsg = {
+        id: sent.id,
+        conversationId: conv.id,
+        fromMe: true,
+        body: result,
+        type: 'text',
+        status: 'sent',
+        byBot: true,
+        timestamp: sent.timestamp,
+      }
+      upsert('messages', botMsg)
+      conv.lastMessage = botMsg
+      conv.updatedAt = botMsg.timestamp
+      save()
+      broadcast({ type: 'message', message: botMsg, conversation: conv, contact })
+    }
+  } catch (err) {
+    console.error('bot pipeline:', err.message)
+  }
+}
+
 waEvents.on('message', async (e) => {
   const session = collection('sessions').find((s) => s.id === e.sessionId)
   if (!session) return
@@ -157,6 +231,9 @@ waEvents.on('message', async (e) => {
   if (existing) return
 
   const { contact, conv } = conversationFor(session, e.jid, e.pushName)
+  // Store the JID on conv so fireBotForConversation can reach it
+  conv._jid = e.jid
+
   const msg = {
     id: e.id,
     conversationId: conv.id,
@@ -183,7 +260,6 @@ waEvents.on('message', async (e) => {
     runAutomations('message.received', ctx, broadcast).catch(
       (err) => console.error('[automation message.received]:', err.message),
     )
-    // message.first: fires only when this is the first inbound message
     const msgCount = collection('messages').filter(
       (m) => m.conversationId === conv.id && !m.fromMe,
     ).length
@@ -197,62 +273,17 @@ waEvents.on('message', async (e) => {
     )
   }
 
-  // ── AI auto-responder ──
+  // ── AI auto-responder (debounced per conversation) ────────────────────────
   if (!e.fromMe && conv.botEnabled) {
-    try {
-      const history = collection('messages')
-        .filter((m) => m.conversationId === conv.id)
-        .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-      const result = await botReply(conv.tenantId, conv, history, e.text)
-
-      if (result) {
-        // Human-like typing delay: 2–6 s random, so replies don't look instant/robotic
-        await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 4000))
-      }
-
-      if (result && typeof result === 'object' && result.handoff) {
-        // ── Human handoff ──
-        const sent = await sendText(session.id, e.jid, result.message)
-        const botMsg = {
-          id: sent.id,
-          conversationId: conv.id,
-          fromMe: true,
-          body: result.message,
-          type: 'text',
-          status: 'sent',
-          byBot: true,
-          timestamp: sent.timestamp,
-        }
-        upsert('messages', botMsg)
-        conv.botEnabled = false
-        conv.status = 'pending'
-        conv.lastMessage = botMsg
-        conv.updatedAt = botMsg.timestamp
-        save()
-        broadcast({ type: 'message', message: botMsg, conversation: conv, contact })
-        broadcast({ type: 'human.requested', conversation: conv, contact })
-        console.log(`[handoff] ${contact.name} requested a human agent`)
-      } else if (result) {
-        const sent = await sendText(session.id, e.jid, result)
-        const botMsg = {
-          id: sent.id,
-          conversationId: conv.id,
-          fromMe: true,
-          body: result,
-          type: 'text',
-          status: 'sent',
-          byBot: true,
-          timestamp: sent.timestamp,
-        }
-        upsert('messages', botMsg)
-        conv.lastMessage = botMsg
-        conv.updatedAt = botMsg.timestamp
-        save()
-        broadcast({ type: 'message', message: botMsg, conversation: conv, contact })
-      }
-    } catch (err) {
-      console.error('bot pipeline:', err.message)
-    }
+    // Cancel any pending bot reply for this conversation
+    const existing = botDebounceTimers.get(conv.id)
+    if (existing) clearTimeout(existing)
+    // Schedule a fresh one — fires BOT_DEBOUNCE_MS after the last inbound message
+    const timer = setTimeout(() => {
+      botDebounceTimers.delete(conv.id)
+      fireBotForConversation(conv, session, contact)
+    }, BOT_DEBOUNCE_MS)
+    botDebounceTimers.set(conv.id, timer)
   }
 })
 
