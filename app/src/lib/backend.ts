@@ -338,7 +338,7 @@ export class PortalClient {
   }
 
   // ── Pipeline Stages ──
-  createStage(tenantId: string, data: { name: string; color: string }) {
+  createStage(tenantId: string, data: { name: string; color: string; pipelineId?: string | null }) {
     return this.req<PipelineStage>(`/tenants/${tenantId}/pipeline-stages`, { method: 'POST', body: JSON.stringify(data) })
   }
   updateStage(id: string, patch: Partial<PipelineStage>) {
@@ -420,6 +420,44 @@ export class PortalClient {
       `/tenants/${tenantId}/broadcast`,
       { method: 'POST', body: JSON.stringify({ message, contactIds }) },
     )
+  }
+
+  // ── Tenant profile (owner-accessible) ──
+  updateTenantProfile(tenantId: string, patch: { name?: string; businessType?: string }) {
+    return this.req<{ id: string; name: string; businessType?: string }>(`/tenants/${tenantId}/profile`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+
+  // ── Contacts: bulk CSV import ──
+  importContacts(tenantId: string, contacts: { name?: string; phone: string; notes?: string }[]) {
+    return this.req<{ created: number; skipped: number }>(`/tenants/${tenantId}/contacts/import`, {
+      method: 'POST',
+      body: JSON.stringify({ contacts }),
+    })
+  }
+
+  // ── Named Pipelines ──
+  getPipelines(tenantId: string) {
+    return this.req<{ id: string; name: string; department: string; tenantId: string; createdAt: string }[]>(
+      `/tenants/${tenantId}/pipelines`,
+    )
+  }
+  createPipeline(tenantId: string, data: { name: string; department: string }) {
+    return this.req<{ id: string; name: string; department: string; tenantId: string; createdAt: string }>(
+      `/tenants/${tenantId}/pipelines`,
+      { method: 'POST', body: JSON.stringify(data) },
+    )
+  }
+  updatePipeline(id: string, patch: { name?: string; department?: string }) {
+    return this.req<{ id: string; name: string; department: string }>(`/pipelines/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  deletePipeline(id: string) {
+    return this.req<{ ok: boolean }>(`/pipelines/${id}`, { method: 'DELETE' })
   }
 
   // ── Workflows ──

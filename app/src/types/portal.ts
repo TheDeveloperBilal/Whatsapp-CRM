@@ -232,6 +232,7 @@ export interface PipelineStage {
   name: string
   color: string
   order: number
+  pipelineId?: string | null
 }
 
 export interface Deal {

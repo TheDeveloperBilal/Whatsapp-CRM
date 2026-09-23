@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePortal } from '@/lib/portal-context'
 import type { Deal, PipelineStage } from '@/types/portal'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,30 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Plus, Pencil, Trash2, Settings2, GripVertical, DollarSign, TrendingUp, Trophy } from 'lucide-react'
+import { Plus, Pencil, Trash2, Settings2, GripVertical, DollarSign, TrendingUp, Trophy, Layers } from 'lucide-react'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
+import { loadProfile } from '@/lib/gateway'
+
+const client = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
+
+// GHL-style default stages for a new pipeline
+const GHL_DEFAULT_STAGES = [
+  { name: 'Lead', color: '#3b82f6' },
+  { name: 'Contact Made', color: '#f59e0b' },
+  { name: 'Demo Scheduled', color: '#8b5cf6' },
+  { name: 'Proposal Sent', color: '#ec4899' },
+  { name: 'Negotiation', color: '#f97316' },
+  { name: 'Won', color: '#10b981' },
+  { name: 'Lost', color: '#ef4444' },
+]
+
+interface Pipeline {
+  id: string
+  name: string
+  department: string
+  tenantId: string
+  createdAt: string
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -196,13 +219,60 @@ export default function Pipeline() {
     pipelineStages,
     deals,
     contacts,
-    createStage,
+    tenant,
     updateStage,
     deleteStage,
     createDeal,
     updateDeal,
     deleteDeal,
   } = usePortal()
+
+  // ── Named pipelines ──
+  const [pipelines, setPipelines] = useState<Pipeline[]>([])
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null)
+  const [pipelineDialog, setPipelineDialog] = useState(false)
+  const [newPipelineName, setNewPipelineName] = useState('')
+  const [newPipelineDept, setNewPipelineDept] = useState('')
+  const [pipelineLoading, setPipelineLoading] = useState(false)
+
+  useEffect(() => {
+    if (!tenant?.id) return
+    client.getPipelines(tenant.id).then((list) => {
+      setPipelines(list)
+      if (list.length > 0 && !selectedPipelineId) setSelectedPipelineId(list[0].id)
+    }).catch(() => {})
+  }, [tenant?.id])
+
+  const handleCreatePipeline = async () => {
+    if (!newPipelineName.trim() || !tenant?.id) return
+    setPipelineLoading(true)
+    try {
+      const pl = await client.createPipeline(tenant.id, { name: newPipelineName.trim(), department: newPipelineDept.trim() })
+      setPipelines((prev) => [...prev, pl])
+      setSelectedPipelineId(pl.id)
+      // seed with GHL default stages
+      for (let i = 0; i < GHL_DEFAULT_STAGES.length; i++) {
+        const s = GHL_DEFAULT_STAGES[i]
+        await client.createStage(tenant.id, { name: s.name, color: s.color, pipelineId: pl.id })
+      }
+      // refresh stages via page reload (simplest approach; store will re-bootstrap)
+      window.location.reload()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setPipelineLoading(false)
+      setPipelineDialog(false)
+      setNewPipelineName('')
+      setNewPipelineDept('')
+    }
+  }
+
+  const handleDeletePipeline = async (id: string) => {
+    if (!confirm('Delete this pipeline and all its stages?')) return
+    await client.deletePipeline(id)
+    setPipelines((prev) => prev.filter((p) => p.id !== id))
+    if (selectedPipelineId === id) setSelectedPipelineId(pipelines.find((p) => p.id !== id)?.id ?? null)
+  }
 
   // Stage dialog
   const [stageDialog, setStageDialog] = useState<{ open: boolean; stage?: PipelineStage }>({ open: false })
@@ -230,11 +300,12 @@ export default function Pipeline() {
   }
 
   const handleSaveStage = async () => {
-    if (!stageName.trim()) return
+    if (!stageName.trim() || !tenant?.id) return
     if (stageDialog.stage) {
       await updateStage(stageDialog.stage.id, { name: stageName.trim(), color: stageColor })
     } else {
-      await createStage({ name: stageName.trim(), color: stageColor })
+      await client.createStage(tenant.id, { name: stageName.trim(), color: stageColor, pipelineId: selectedPipelineId })
+      window.location.reload()
     }
     setStageDialog({ open: false })
   }
@@ -308,24 +379,66 @@ export default function Pipeline() {
     dragRef.current = null
   }, [deals, updateDeal])
 
-  // ── Stats ──
-  const totalValue = deals.reduce((s, d) => s + d.value, 0)
-  const wonDeals = deals.filter((d) => d.outcome === 'won')
-  const closedDeals = deals.filter((d) => d.outcome)
-  const winRate = closedDeals.length ? Math.round((wonDeals.length / closedDeals.length) * 100) : 0
-  const currency = deals[0]?.currency ?? 'USD'
+  // ── Stats (scoped to selected pipeline's stages) ──
+  const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId)
+  const visibleStages = [...pipelineStages]
+    .filter((s) => selectedPipelineId ? s.pipelineId === selectedPipelineId : !s.pipelineId)
+    .sort((a, b) => a.order - b.order)
+  const visibleStageIds = new Set(visibleStages.map((s) => s.id))
+  const visibleDeals = deals.filter((d) => visibleStageIds.has(d.stageId))
 
-  const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order)
+  const totalValue = visibleDeals.reduce((s, d) => s + d.value, 0)
+  const wonDeals = visibleDeals.filter((d) => d.outcome === 'won')
+  const closedDeals = visibleDeals.filter((d) => d.outcome)
+  const winRate = closedDeals.length ? Math.round((wonDeals.length / closedDeals.length) * 100) : 0
+  const currency = visibleDeals[0]?.currency ?? 'USD'
+
+  const sortedStages = visibleStages
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Pipeline</h1>
-        <Button onClick={openNewStage} size="sm">
-          <Plus className="h-4 w-4 mr-1" />
-          Add Stage
-        </Button>
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Pipeline</h1>
+          {/* Pipeline selector */}
+          {pipelines.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Select value={selectedPipelineId ?? ''} onValueChange={setSelectedPipelineId}>
+                <SelectTrigger className="h-8 text-sm w-48">
+                  <Layers className="h-3.5 w-3.5 mr-1.5 text-gray-400" />
+                  <SelectValue placeholder="Select pipeline" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}{p.department ? ` · ${p.department}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedPipelineId && (
+                <button
+                  onClick={() => handleDeletePipeline(selectedPipelineId)}
+                  className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  title="Delete pipeline"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => { setNewPipelineName(''); setNewPipelineDept(''); setPipelineDialog(true) }} size="sm" variant="outline">
+            <Plus className="h-4 w-4 mr-1" />
+            New Pipeline
+          </Button>
+          <Button onClick={openNewStage} size="sm" disabled={!selectedPipelineId && pipelines.length > 0}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Stage
+          </Button>
+        </div>
       </div>
 
       {/* Stats strip */}
@@ -354,7 +467,7 @@ export default function Pipeline() {
             <StageColumn
               key={stage.id}
               stage={stage}
-              deals={deals.filter((d) => d.stageId === stage.id)}
+              deals={visibleDeals.filter((d) => d.stageId === stage.id)}
               contacts={contacts}
               onAddDeal={openNewDeal}
               onEditDeal={openEditDeal}
@@ -366,18 +479,66 @@ export default function Pipeline() {
             />
           ))}
 
-          {pipelineStages.length === 0 && (
+          {sortedStages.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-              <p className="text-lg font-medium mb-2">No stages yet</p>
-              <p className="text-sm mb-4">Create your first pipeline stage to get started</p>
-              <Button onClick={openNewStage} variant="outline">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Stage
-              </Button>
+              {pipelines.length === 0 ? (
+                <>
+                  <p className="text-lg font-medium mb-2">No pipelines yet</p>
+                  <p className="text-sm mb-4">Create your first pipeline to get started</p>
+                  <Button onClick={() => setPipelineDialog(true)} variant="outline">
+                    <Plus className="h-4 w-4 mr-1" />
+                    New Pipeline
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-medium mb-2">No stages in this pipeline</p>
+                  <p className="text-sm mb-4">Add stages to start tracking deals</p>
+                  <Button onClick={openNewStage} variant="outline">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Stage
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* New Pipeline Dialog */}
+      <Dialog open={pipelineDialog} onOpenChange={(o) => !o && setPipelineDialog(false)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New Pipeline</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Pipeline Name *</Label>
+              <Input
+                value={newPipelineName}
+                onChange={(e) => setNewPipelineName(e.target.value)}
+                placeholder="e.g. Sales, HR, Support"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Department <span className="text-xs text-gray-400">(optional)</span></Label>
+              <Input
+                value={newPipelineDept}
+                onChange={(e) => setNewPipelineDept(e.target.value)}
+                placeholder="e.g. Sales Team"
+              />
+            </div>
+            <p className="text-xs text-gray-500">Default stages (Lead → Contact Made → Demo → Proposal → Negotiation → Won → Lost) will be added automatically.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPipelineDialog(false)}>Cancel</Button>
+            <Button onClick={handleCreatePipeline} disabled={!newPipelineName.trim() || pipelineLoading}>
+              {pipelineLoading ? 'Creating…' : 'Create Pipeline'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Stage Dialog */}
       <Dialog open={stageDialog.open} onOpenChange={(o) => !o && setStageDialog({ open: false })}>

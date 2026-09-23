@@ -47,7 +47,7 @@ export default function Settings() {
     if (!bizName.trim() || !tenant?.id) return
     setBizSaving(true)
     try {
-      await updateTenant(tenant.id, { name: bizName.trim() })
+      await client.updateTenantProfile(tenant.id, { name: bizName.trim() })
       toast.success('Business name updated')
     } catch {
       toast.error('Failed to update business name')

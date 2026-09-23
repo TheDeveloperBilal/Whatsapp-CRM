@@ -1,8 +1,9 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useMemo, useState, useRef } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { Search, UserCheck, UserX } from 'lucide-react'
+import { Search, UserCheck, UserX, Upload, X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -19,14 +20,81 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'sonner'
 import { usePortal } from '@/lib/store'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
+import { loadProfile } from '@/lib/gateway'
 import type { Contact } from '@/types/portal'
 
+const contactsClient = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
+
+interface CsvRow { name: string; phone: string; notes: string }
+
+function parseCsv(text: string): CsvRow[] {
+  const lines = text.trim().split(/\r?\n/)
+  if (!lines.length) return []
+  const header = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/"/g, ''))
+  const nameIdx = header.indexOf('name')
+  const phoneIdx = header.findIndex((h) => h === 'phone' || h === 'number' || h === 'mobile')
+  const notesIdx = header.indexOf('notes')
+  if (phoneIdx === -1) return []
+  return lines.slice(1).map((line) => {
+    const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
+    return {
+      name: nameIdx >= 0 ? cols[nameIdx] ?? '' : '',
+      phone: cols[phoneIdx] ?? '',
+      notes: notesIdx >= 0 ? cols[notesIdx] ?? '' : '',
+    }
+  }).filter((r) => r.phone)
+}
+
 export default function Contacts() {
-  const { contacts, tags, saveContactNote } = usePortal()
+  const { contacts, tags, saveContactNote, tenant } = usePortal()
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState<Contact | null>(null)
+  // CSV import
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [csvDialog, setCsvDialog] = useState(false)
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([])
+  const [csvImporting, setCsvImporting] = useState(false)
+  const [csvResult, setCsvResult] = useState<{ created: number; skipped: number } | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const rows = parseCsv(ev.target?.result as string)
+      setCsvRows(rows)
+      setCsvResult(null)
+      setCsvDialog(true)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const handleImport = async () => {
+    if (!tenant?.id || !csvRows.length) return
+    setCsvImporting(true)
+    try {
+      const result = await contactsClient.importContacts(tenant.id, csvRows)
+      setCsvResult(result)
+      toast.success(`Imported ${result.created} contacts (${result.skipped} skipped)`)
+      setCsvRows([])
+    } catch {
+      toast.error('Import failed')
+    } finally {
+      setCsvImporting(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     const needle = q.toLowerCase()
@@ -37,6 +105,9 @@ export default function Contacts() {
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
+      {/* Hidden file input */}
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Contacts</h2>
@@ -44,14 +115,20 @@ export default function Contacts() {
             CRM records synced from WhatsApp conversations. {contacts.length} total.
           </p>
         </div>
-        <div className="relative w-72">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name or phone…"
-            className="pl-8"
-          />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+            <Upload className="size-4 mr-1.5" />
+            Import CSV
+          </Button>
+          <div className="relative w-72">
+            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search name or phone…"
+              className="pl-8"
+            />
+          </div>
         </div>
       </div>
 
@@ -113,6 +190,68 @@ export default function Contacts() {
           </TableBody>
         </Table>
       </div>
+
+      {/* CSV Import Dialog */}
+      <Dialog open={csvDialog} onOpenChange={(o) => { if (!o) { setCsvDialog(false); setCsvRows([]); setCsvResult(null) } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Import Contacts from CSV</DialogTitle>
+          </DialogHeader>
+          {csvResult ? (
+            <div className="py-6 text-center space-y-3">
+              <CheckCircle2 className="size-12 text-emerald-500 mx-auto" />
+              <p className="font-semibold text-lg">{csvResult.created} contacts imported</p>
+              <p className="text-sm text-muted-foreground">{csvResult.skipped} skipped (already exist or missing phone)</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3 py-2">
+                <p className="text-sm text-muted-foreground">
+                  CSV must have a <code className="bg-muted px-1 rounded text-xs">phone</code> column. Optional: <code className="bg-muted px-1 rounded text-xs">name</code>, <code className="bg-muted px-1 rounded text-xs">notes</code>.
+                </p>
+                {csvRows.length > 0 ? (
+                  <div className="rounded-md border overflow-hidden">
+                    <div className="overflow-y-auto max-h-64">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Phone</TableHead>
+                            <TableHead>Notes</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {csvRows.slice(0, 50).map((r, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="text-sm">{r.name || '—'}</TableCell>
+                              <TableCell className="text-sm">{r.phone}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{r.notes || '—'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {csvRows.length > 50 && (
+                      <p className="text-xs text-muted-foreground px-3 py-2">…and {csvRows.length - 50} more rows</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-amber-600">
+                    <AlertCircle className="size-4 flex-shrink-0" />
+                    No valid rows found. Ensure the CSV has a <code>phone</code> column.
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setCsvDialog(false); setCsvRows([]) }}>Cancel</Button>
+                <Button onClick={handleImport} disabled={!csvRows.length || csvImporting}>
+                  {csvImporting ? 'Importing…' : `Import ${csvRows.length} Contacts`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <SheetContent>

@@ -95,6 +95,7 @@ const seed = () => ({
   invoices: [],
   workflows: [],
   workflowRuns: [],
+  pipelines: [],
 })
 
 let db
@@ -139,6 +140,7 @@ if (!db.paymentLinks)     { db.paymentLinks     = []; fs.writeFileSync(DB_FILE, 
 if (!db.invoices)         { db.invoices         = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)) }
 if (!db.workflows)        { db.workflows        = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)) }
 if (!db.workflowRuns)     { db.workflowRuns     = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)) }
+if (!db.pipelines)        { db.pipelines        = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); console.log('[db] Migrated: added pipelines collection') }
 
 // Migrate existing tenants: add businessType if missing
 if (db.tenants) {

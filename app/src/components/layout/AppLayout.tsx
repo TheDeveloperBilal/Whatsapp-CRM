@@ -66,6 +66,8 @@ interface SidebarPaneProps {
   groups: NavGroup[]
   search: string
   setSearch: (v: string) => void
+  searchOpen: boolean
+  setSearchOpen: (v: boolean) => void
   onNavClick: () => void
   username?: string
   role?: string
@@ -80,7 +82,7 @@ interface SidebarPaneProps {
 // ─── Sidebar pane (extracted so it can be used in mobile overlay too) ─────────
 
 function SidebarPane({
-  groups, search, setSearch, onNavClick,
+  groups, search, setSearch, searchOpen, setSearchOpen, onNavClick,
   username, role, isSuperAdmin,
   connected, totalSessions, gatewayKind, backendOnline,
   logout,
@@ -117,19 +119,37 @@ function SidebarPane({
 
       {/* Search */}
       <div className="px-4 pb-3">
-        <div
-          className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors"
-          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
-        >
-          <Search className="size-3.5 shrink-0" style={{ color: 'rgba(255,255,255,0.45)' }} />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search menu..."
-            className="bg-transparent text-[13px] outline-none flex-1 min-w-0"
-            style={{ color: 'rgba(255,255,255,0.7)', caretColor: '#818cf8' }}
-          />
-        </div>
+        {searchOpen ? (
+          <div
+            className="flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors"
+            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
+          >
+            <Search className="size-3.5 shrink-0" style={{ color: 'rgba(255,255,255,0.45)' }} />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); setSearchOpen(false) } }}
+              placeholder="Search menu..."
+              className="bg-transparent text-[13px] outline-none flex-1 min-w-0"
+              style={{ color: 'rgba(255,255,255,0.7)', caretColor: '#818cf8' }}
+            />
+            <button
+              onClick={() => { setSearch(''); setSearchOpen(false) }}
+              className="text-[11px] rounded px-1 hover:opacity-80"
+              style={{ color: 'rgba(255,255,255,0.4)' }}
+            >✕</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 transition-colors hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <Search className="size-3.5 shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }} />
+            <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Search menu…</span>
+          </button>
+        )}
       </div>
 
       {/* Nav groups */}
@@ -246,6 +266,7 @@ export default function AppLayout() {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const unread = conversations.reduce((n, c) => n + c.unread, 0)
   const connected = sessions.filter(s => s.status === 'connected').length
@@ -309,6 +330,8 @@ export default function AppLayout() {
     groups: navGroups,
     search,
     setSearch,
+    searchOpen,
+    setSearchOpen,
     onNavClick: () => setMobileOpen(false),
     username: currentUser?.username,
     role: currentUser?.role,

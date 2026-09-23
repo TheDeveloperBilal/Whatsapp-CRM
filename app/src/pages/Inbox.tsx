@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { ArrowLeft, Bot, CheckCheck, Check, Clock, Send, UserRound, Image as ImageIcon, AlertCircle, Mic, FileText, Video, Play, Pause } from 'lucide-react'
+import { ArrowLeft, Bot, CheckCheck, Check, Clock, Send, UserRound, Image as ImageIcon, AlertCircle, Mic, FileText, Video, Play, Pause, Tag, X, Plus } from 'lucide-react'
+import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
+import { loadProfile } from '@/lib/gateway'
+
+const inboxClient = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -162,6 +166,9 @@ export default function Inbox() {
   // mobile: 'list' | 'thread'
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
   const msgScrollRef = useRef<HTMLDivElement>(null)
+  // tag management
+  const [localContactTags, setLocalContactTags] = useState<Record<string, string[]>>({})
+  const [tagPickerOpen, setTagPickerOpen] = useState(false)
 
   const active = conversations.find((c) => c.id === activeId)
   const contact = contacts.find((c) => c.id === active?.contactId)
@@ -187,6 +194,7 @@ export default function Inbox() {
   const selectConversation = (id: string) => {
     setActiveId(id)
     setMobileView('thread')
+    setTagPickerOpen(false)
   }
 
   const send = async () => {
@@ -407,15 +415,68 @@ export default function Inbox() {
                   <div className="font-semibold">{contact.name}</div>
                   <div className="text-xs text-muted-foreground">{contact.phone}</div>
                 </div>
-                <div className="flex flex-wrap justify-center gap-1">
-                  {contact.tags.map((tid) => {
-                    const t = tags.find((x) => x.id === tid)
-                    return t ? (
-                      <Badge key={tid} variant="outline" style={{ borderColor: t.color, color: t.color }}>
-                        {t.label}
-                      </Badge>
-                    ) : null
-                  })}
+                {/* Tags — editable */}
+                <div className="w-full space-y-1.5">
+                  <div className="flex flex-wrap justify-center gap-1">
+                    {(localContactTags[contact.id] ?? contact.tags).map((tid) => {
+                      const t = tags.find((x) => x.id === tid)
+                      return t ? (
+                        <span
+                          key={tid}
+                          className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium border"
+                          style={{ borderColor: t.color, color: t.color }}
+                        >
+                          {t.label}
+                          <button
+                            onClick={() => {
+                              const current = localContactTags[contact.id] ?? contact.tags
+                              const next = current.filter((id) => id !== tid)
+                              setLocalContactTags((prev) => ({ ...prev, [contact.id]: next }))
+                              inboxClient.patchContact(contact.id, { tags: next }).catch(() => {})
+                            }}
+                            className="ml-0.5 hover:opacity-70"
+                          >
+                            <X className="size-2.5" />
+                          </button>
+                        </span>
+                      ) : null
+                    })}
+                  </div>
+                  {/* Add tag button */}
+                  <div className="flex justify-center">
+                    <div className="relative">
+                      <button
+                        onClick={() => setTagPickerOpen((v) => !v)}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        <Tag className="size-3" />
+                        Add tag
+                      </button>
+                      {tagPickerOpen && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 min-w-[140px]">
+                          {tags.filter((t) => !(localContactTags[contact.id] ?? contact.tags).includes(t.id)).map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => {
+                                const current = localContactTags[contact.id] ?? contact.tags
+                                const next = [...current, t.id]
+                                setLocalContactTags((prev) => ({ ...prev, [contact.id]: next }))
+                                inboxClient.patchContact(contact.id, { tags: next }).catch(() => {})
+                                setTagPickerOpen(false)
+                              }}
+                              className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-xs text-left"
+                            >
+                              <span className="size-2 rounded-full flex-shrink-0" style={{ background: t.color }} />
+                              {t.label}
+                            </button>
+                          ))}
+                          {tags.filter((t) => !(localContactTags[contact.id] ?? contact.tags).includes(t.id)).length === 0 && (
+                            <p className="text-xs text-gray-400 px-2 py-1">All tags applied</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 

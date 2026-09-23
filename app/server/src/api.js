@@ -169,6 +169,19 @@ export function buildApi(broadcast) {
     res.json(t)
   })
 
+  // Owner-level: update own tenant's name / businessType
+  r.patch('/tenants/:tid/profile', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const t = collection('tenants').find((x) => x.id === req.params.tid)
+    if (!t) return res.status(404).json({ error: 'not found' })
+    const { name, businessType } = req.body
+    if (name !== undefined) t.name = name.trim()
+    if (businessType !== undefined) t.businessType = businessType
+    save()
+    broadcast({ type: 'tenant', tenant: t })
+    res.json(t)
+  })
+
   r.delete('/tenants/:id', requireSuperAdmin, (req, res) => {
     const tid = req.params.id
     if (tid === 't1') return res.status(400).json({ error: 'cannot delete the default tenant' })
@@ -363,6 +376,72 @@ export function buildApi(broadcast) {
       }
     }
     res.json(c)
+  })
+
+  // ── Bulk contact import via CSV rows ──────────────────────────────────────
+  r.post('/tenants/:tid/contacts/import', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const rows = req.body.contacts // [{ name, phone, notes?, tags? }]
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'contacts array required' })
+    const created = []; const skipped = []
+    for (const row of rows) {
+      const phone = String(row.phone || '').trim().replace(/\s+/g, '')
+      if (!phone) { skipped.push(row); continue }
+      const existing = collection('contacts').find((c) => c.tenantId === req.params.tid && c.phone === phone)
+      if (existing) { skipped.push(row); continue }
+      const contact = {
+        id: uid('c'), tenantId: req.params.tid,
+        name: String(row.name || phone).trim(),
+        phone,
+        notes: String(row.notes || '').trim(),
+        tags: [],
+        avatarHue: Math.floor(Math.random() * 360),
+        createdAt: new Date().toISOString(),
+      }
+      upsert('contacts', contact)
+      created.push(contact)
+    }
+    save()
+    created.forEach((c) => broadcast({ type: 'contact', contact: c }))
+    res.json({ created: created.length, skipped: skipped.length })
+  })
+
+  // ── Pipelines (named pipeline views, each with its own stages) ────────────
+  r.get('/tenants/:tid/pipelines', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json(collection('pipelines').filter((p) => p.tenantId === req.params.tid))
+  })
+
+  r.post('/tenants/:tid/pipelines', (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const { name, department = '' } = req.body
+    if (!name) return res.status(400).json({ error: 'name required' })
+    const pipeline = { id: uid('pl'), tenantId: req.params.tid, name, department, createdAt: new Date().toISOString() }
+    upsert('pipelines', pipeline)
+    save()
+    res.json(pipeline)
+  })
+
+  r.patch('/pipelines/:id', (req, res) => {
+    const p = collection('pipelines').find((x) => x.id === req.params.id)
+    if (!p) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, p.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const { name, department } = req.body
+    if (name !== undefined) p.name = name
+    if (department !== undefined) p.department = department
+    save()
+    res.json(p)
+  })
+
+  r.delete('/pipelines/:id', (req, res) => {
+    const p = collection('pipelines').find((x) => x.id === req.params.id)
+    if (!p) return res.status(404).json({ error: 'not found' })
+    if (!canAccessTenant(req.user, p.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    remove('pipelines', (x) => x.id === req.params.id)
+    // also remove stages that belonged to this pipeline
+    remove('pipelineStages', (s) => s.pipelineId === req.params.id)
+    save()
+    res.json({ ok: true })
   })
 
   r.post('/sessions', (req, res) => {
@@ -731,10 +810,12 @@ export function buildApi(broadcast) {
 
   r.post('/tenants/:tid/pipeline-stages', (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
-    const { name, color = '#6366f1' } = req.body
+    const { name, color = '#6366f1', pipelineId = null } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
-    const existing = collection('pipelineStages').filter((s) => s.tenantId === req.params.tid)
-    const stage = { id: uid('ps'), tenantId: req.params.tid, name, color, order: existing.length }
+    const existing = collection('pipelineStages').filter(
+      (s) => s.tenantId === req.params.tid && s.pipelineId === pipelineId
+    )
+    const stage = { id: uid('ps'), tenantId: req.params.tid, name, color, order: existing.length, pipelineId }
     upsert('pipelineStages', stage)
     save()
     broadcast({ type: 'pipeline.stage', stage })
