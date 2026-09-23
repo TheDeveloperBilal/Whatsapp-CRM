@@ -21,14 +21,22 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const AI_KEY = process.env.AI_API_KEY || ''
-const AI_BASE = (process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '')
-const AI_MODEL = process.env.AI_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b'
+// Primary: Google Gemini (uses Google's OpenAI-compatible endpoint)
+const GEMINI_KEY  = process.env.GEMINI_API_KEY || ''
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai'
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp'
+
+// Fallback: Nvidia via OpenRouter
+const NVIDIA_KEY   = process.env.AI_API_KEY || ''
+const NVIDIA_BASE  = (process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '')
+const NVIDIA_MODEL = process.env.AI_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b'
+
+const hasAny = !!(GEMINI_KEY || NVIDIA_KEY)
 
 export const aiStatus = () => ({
-  configured: !!AI_KEY,
-  baseUrl: AI_BASE,
-  model: AI_MODEL,
+  configured: hasAny,
+  primary: GEMINI_KEY ? `gemini (${GEMINI_MODEL})` : null,
+  fallback: NVIDIA_KEY ? `nvidia via openrouter (${NVIDIA_MODEL})` : null,
 })
 
 const HANDOFF_KEYWORDS = [
@@ -65,6 +73,29 @@ function businessHoursOk(cfg) {
   if (!cfg.businessHoursOnly) return true
   const h = new Date().getHours()
   return h >= 8 && h < 21
+}
+
+async function callOneLLM(apiKey, baseUrl, model, messages) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 25_000)
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-Title': 'WhatsApp Portal',
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 400 }),
+    })
+    if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content?.trim() || null
+  } finally {
+    clearTimeout(t)
+  }
 }
 
 async function callLLM(cfg, history, inboundText) {
@@ -146,31 +177,21 @@ async function callLLM(cfg, history, inboundText) {
     })),
     { role: 'user', content: inboundText },
   ]
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 30_000)
-  try {
-    const res = await fetch(`${AI_BASE}/chat/completions`, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${AI_KEY}`,
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'WhatsApp Portal',
-      },
-      body: JSON.stringify({
-        model: cfg.model || AI_MODEL,
-        messages,
-        temperature: 0.4,
-        max_tokens: 400,
-      }),
-    })
-    if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const data = await res.json()
-    return data.choices?.[0]?.message?.content?.trim() || null
-  } finally {
-    clearTimeout(t)
+  // Try Gemini first, then Nvidia as fallback
+  if (GEMINI_KEY) {
+    try {
+      const reply = await callOneLLM(GEMINI_KEY, GEMINI_BASE, GEMINI_MODEL, messages)
+      if (reply) return reply
+    } catch (e) {
+      console.warn(`[AI] Gemini failed (${e.message}) — trying Nvidia fallback...`)
+    }
   }
+
+  if (NVIDIA_KEY) {
+    return callOneLLM(NVIDIA_KEY, NVIDIA_BASE, cfg.model || NVIDIA_MODEL, messages)
+  }
+
+  return null
 }
 
 // returns: string | null | { handoff: true, message: string }
@@ -205,19 +226,19 @@ export async function botReply(tenantId, conversation, history, inboundText) {
     if (matchRule(rule, inboundText)) return rule.response
   }
 
-  // 2. generative AI
-  if (cfg.aiEnabled && AI_KEY) {
+  // 2. generative AI (Gemini primary → Nvidia fallback)
+  if (cfg.aiEnabled && hasAny) {
     try {
       const reply = await callLLM(cfg, history, inboundText)
       if (reply) return reply
     } catch (e) {
-      console.error('LLM error:', e.message)
+      console.error('[AI] All models failed:', e.message)
     }
   }
 
-  // 3. fallback
-  if (cfg.aiEnabled && !AI_KEY) {
-    return `${cfg.fallbackMessage}\n\n_(AI key not configured — set AI_API_KEY in app/.env to enable live AI replies.)_`
+  // 3. fallback message
+  if (cfg.aiEnabled && !hasAny) {
+    return `${cfg.fallbackMessage}\n\n_(AI key not configured — add GEMINI_API_KEY or AI_API_KEY in app/.env)_`
   }
   return cfg.fallback === 'message' ? cfg.fallbackMessage : null
 }
