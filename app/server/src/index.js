@@ -99,16 +99,24 @@ if (process.env.NODE_ENV === 'production') {
 
 // ─── ingest inbound/outbound WhatsApp events into the CRM ───────────────────
 
+// Extract a clean E.164 phone from a Baileys JID.
+// JIDs can be: 923215474380875@s.whatsapp.net or 923215474380875:0@s.whatsapp.net
+function phoneFromJid(jid) {
+  const user = jid.split('@')[0].split(':')[0] // strip @domain and :device suffix
+  const digits = user.replace(/\D/g, '')       // digits only
+  return `+${digits}`
+}
+
 function conversationFor(session, jid, pushName) {
   const tenantId = session.tenantId
   let contact = collection('contacts').find((c) => c.tenantId === tenantId && c.chatId === jid)
   if (!contact) {
-    const phone = jid.split('@')[0]
+    const phone = phoneFromJid(jid)
     contact = {
       id: uid('c'),
       tenantId,
-      name: pushName || `+${phone}`,
-      phone: `+${phone}`,
+      name: pushName || phone,
+      phone,
       chatId: jid,
       avatarHue: Math.floor(Math.random() * 360),
       tags: ['tag2'],
@@ -304,7 +312,7 @@ waEvents.on('history', ({ sessionId, contacts }) => {
   for (const c of contacts || []) {
     const jid = c.id
     if (!jid || jid === 'status@broadcast' || jid.endsWith('@newsletter') || jid.endsWith('@g.us')) continue
-    const phone = jid.split('@')[0]
+    const phone = phoneFromJid(jid)
     const existingContact = collection('contacts').find(
       (x) => x.tenantId === session.tenantId && x.chatId === jid,
     )
@@ -312,8 +320,8 @@ waEvents.on('history', ({ sessionId, contacts }) => {
       upsert('contacts', {
         id: uid('c'),
         tenantId: session.tenantId,
-        name: c.name || c.notify || `+${phone}`,
-        phone: `+${phone}`,
+        name: c.name || c.notify || phone,
+        phone,
         chatId: jid,
         avatarHue: Math.floor(Math.random() * 360),
         tags: [],

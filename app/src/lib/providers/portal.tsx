@@ -919,7 +919,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     setTenantId,
     profile,
     updateProfile,
-    gatewayKind: 'portal (baileys)',
+    gatewayKind: 'WhatsApp',
     backendOnline,
     tags,
     sessions,

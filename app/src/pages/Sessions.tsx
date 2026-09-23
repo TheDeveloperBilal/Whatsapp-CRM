@@ -65,8 +65,7 @@ export default function Sessions() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">WhatsApp Sessions</h2>
           <p className="text-muted-foreground">
-            Each session is one linked WhatsApp number, served by the{' '}
-            <Badge variant="outline">{gatewayKind}</Badge> gateway.
+            Each session is one linked WhatsApp number. Connect and scan the QR code to go live.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -93,8 +92,8 @@ export default function Sessions() {
                   <Select value={engine} onValueChange={setEngine}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="whatsapp-web.js">whatsapp-web.js</SelectItem>
-                      <SelectItem value="baileys">baileys</SelectItem>
+                      <SelectItem value="whatsapp-web.js">WhatsApp Web</SelectItem>
+                      <SelectItem value="baileys">WhatsApp Web (Baileys)</SelectItem>
                       <SelectItem value="cloud-api">Meta Cloud API</SelectItem>
                     </SelectContent>
                   </Select>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { KeyRound, Building2, Clock, Eye, EyeOff, Check, Loader2 } from 'lucide-react'
+import { KeyRound, Building2, Clock, Eye, EyeOff, Check, Loader2, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -53,6 +53,21 @@ export default function Settings() {
       toast.error('Failed to update business name')
     } finally {
       setBizSaving(false)
+    }
+  }
+
+  // ── Fix contact phone numbers ────────────────────────────────────────────────
+  const [phoneFixing, setPhoneFixing] = useState(false)
+  const fixPhones = async () => {
+    if (!tenant?.id) return
+    setPhoneFixing(true)
+    try {
+      const res = await client.fixContactPhones(tenant.id)
+      toast.success(`Fixed ${res.fixed} of ${res.total} contact phone numbers`)
+    } catch {
+      toast.error('Failed to fix phone numbers')
+    } finally {
+      setPhoneFixing(false)
     }
   }
 
@@ -163,6 +178,34 @@ export default function Settings() {
                 }
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Contact Phones ── */}
+      {isOwnerOrAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Phone className="size-4" /> Contact Phone Numbers
+            </CardTitle>
+            <CardDescription>
+              Re-normalize phone numbers for all existing contacts from their WhatsApp chat IDs. Run this if contact numbers look wrong or have incorrect country codes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fixPhones}
+              disabled={phoneFixing}
+            >
+              {phoneFixing
+                ? <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                : <Phone className="mr-1.5 size-3.5" />
+              }
+              Fix Contact Phone Numbers
+            </Button>
           </CardContent>
         </Card>
       )}

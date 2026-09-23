@@ -422,6 +422,11 @@ export class PortalClient {
     )
   }
 
+  // ── Contact phone normalization ──
+  fixContactPhones(tenantId: string) {
+    return this.req<{ fixed: number; total: number }>(`/tenants/${tenantId}/contacts/fix-phones`, { method: 'POST' })
+  }
+
   // ── Tenant profile (owner-accessible) ──
   updateTenantProfile(tenantId: string, patch: { name?: string; businessType?: string }) {
     return this.req<{ id: string; name: string; businessType?: string }>(`/tenants/${tenantId}/profile`, {
