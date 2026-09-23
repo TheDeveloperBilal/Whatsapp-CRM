@@ -21,10 +21,9 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-// Primary: Google Gemini (uses Google's OpenAI-compatible endpoint)
+// Primary: Google Gemini (native API — newer keys use v3+ models)
 const GEMINI_KEY  = process.env.GEMINI_API_KEY || ''
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai'
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp'
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
 // Fallback: Nvidia via OpenRouter
 const NVIDIA_KEY   = process.env.AI_API_KEY || ''
@@ -75,7 +74,37 @@ function businessHoursOk(cfg) {
   return h >= 8 && h < 21
 }
 
-async function callOneLLM(apiKey, baseUrl, model, messages) {
+// Native Gemini API (newer keys only support v3+ models via native endpoint)
+async function callGemini(messages) {
+  const system = messages.find(m => m.role === 'system')
+  const chat = messages.filter(m => m.role !== 'system')
+  const contents = chat.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+  const body = {
+    contents,
+    generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
+  }
+  if (system) body.systemInstruction = { parts: [{ text: system.content }] }
+
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 25_000)
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`,
+      { method: 'POST', signal: ctrl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    )
+    if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const data = await res.json()
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+// OpenRouter (OpenAI-compatible) for Nvidia fallback
+async function callOpenRouter(apiKey, baseUrl, model, messages) {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), 25_000)
   try {
@@ -90,7 +119,7 @@ async function callOneLLM(apiKey, baseUrl, model, messages) {
       },
       body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 400 }),
     })
-    if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const data = await res.json()
     return data.choices?.[0]?.message?.content?.trim() || null
   } finally {
@@ -180,7 +209,7 @@ async function callLLM(cfg, history, inboundText) {
   // Try Gemini first, then Nvidia as fallback
   if (GEMINI_KEY) {
     try {
-      const reply = await callOneLLM(GEMINI_KEY, GEMINI_BASE, GEMINI_MODEL, messages)
+      const reply = await callGemini(messages)
       if (reply) return reply
     } catch (e) {
       console.warn(`[AI] Gemini failed (${e.message}) — trying Nvidia fallback...`)
@@ -188,7 +217,7 @@ async function callLLM(cfg, history, inboundText) {
   }
 
   if (NVIDIA_KEY) {
-    return callOneLLM(NVIDIA_KEY, NVIDIA_BASE, cfg.model || NVIDIA_MODEL, messages)
+    return callOpenRouter(NVIDIA_KEY, NVIDIA_BASE, cfg.model || NVIDIA_MODEL, messages)
   }
 
   return null
