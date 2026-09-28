@@ -183,7 +183,7 @@ function conversationFor(session, jid, pushName) {
       (err) => console.error('[automation contact.created]:', err.message),
     )
     fireTrigger(tenantId, 'contact.created', { contactId: contact.id })
-  } else if (pushName && contact.name !== pushName && contact.name.startsWith('+')) {
+  } else if (pushName && contact.name !== pushName && (contact.name.startsWith('+') || contact.name === 'Unknown')) {
     contact.name = pushName
     upsert('contacts', contact)
     broadcast({ type: 'contact', contact })

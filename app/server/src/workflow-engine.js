@@ -495,11 +495,23 @@ function passesTriggerFilters(wf, triggerType, context) {
 export function fireTrigger(tenantId, triggerType, context = {}) {
   const workflows = collection('workflows').filter(
     w => w.tenantId === tenantId
+      && w.status !== 'draft'
       && (w.enabled || w.status === 'published')
       && (w.triggerType === triggerType || w.trigger?.type === triggerType)
   )
   for (const wf of workflows) {
     if (!passesTriggerFilters(wf, triggerType, context)) continue
+    // De-duplicate: don't re-run if already completed for this contact in the last 24h
+    if (context.contactId) {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000
+      const alreadyRan = collection('workflowRuns').find(
+        r => r.workflowId === wf.id
+          && r.contactId === context.contactId
+          && r.status === 'completed'
+          && new Date(r.startedAt).getTime() > cutoff
+      )
+      if (alreadyRan) continue
+    }
     if (Array.isArray(wf.steps)) {
       runWorkflowV2(wf, context).catch(console.error)
     } else if (wf.nodes) {
