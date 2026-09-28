@@ -1222,7 +1222,10 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
     if (!wf) return res.status(404).json({ error: 'not found' })
-    Object.assign(wf, { ...req.body, id: wf.id, tenantId: wf.tenantId, updatedAt: new Date().toISOString() })
+    const { versions, ...rest } = req.body
+    Object.assign(wf, { ...rest, id: wf.id, tenantId: wf.tenantId, updatedAt: new Date().toISOString() })
+    // Persist version history (cap at 10)
+    if (versions) wf.versions = versions.slice(0, 10)
     save()
     broadcast({ type: 'workflow', workflow: wf })
     res.json(wf)

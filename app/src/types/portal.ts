@@ -407,12 +407,40 @@ export interface WorkflowEdge {
   label?: string
 }
 
+export interface WfStep {
+  id: string
+  type: string
+  label: string
+  config: Record<string, any>
+  notes?: string
+  branches?: { condition: WfStep[]; otherwise: WfStep[] }
+}
+
+export interface WfTrigger {
+  type: string
+  config: Record<string, any>
+}
+
+export interface WfVersion {
+  v: number
+  savedAt: string
+  status: string
+  trigger: WfTrigger
+  steps: WfStep[]
+}
+
 export interface Workflow {
   id: string
   tenantId: string
   name: string
   description?: string
   enabled: boolean
+  status: 'draft' | 'published'
+  // New linear format
+  trigger?: WfTrigger
+  steps?: WfStep[]
+  versions?: WfVersion[]
+  // Legacy ReactFlow format (kept for backward compat)
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   triggerType: WorkflowTriggerType
