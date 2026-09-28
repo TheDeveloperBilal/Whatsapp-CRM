@@ -7,7 +7,7 @@ import { startSession, stopSession, sendText } from './wa.js'
 import { aiStatus } from './bot.js'
 import { runAutomations } from './automations.js'
 import { runIntentRouting } from './intents.js'
-import { fireTrigger, runWorkflow } from './workflow-engine.js'
+import { fireTrigger, runWorkflow, runWorkflowV2 } from './workflow-engine.js'
 import {
   checkPassword,
   hashPassword,
@@ -1391,7 +1391,11 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
     if (!wf) return res.status(404).json({ error: 'not found' })
-    runWorkflow(wf, req.body.context || {}).catch(console.error)
+    if (Array.isArray(wf.steps)) {
+      runWorkflowV2(wf, req.body.context || {}).catch(console.error)
+    } else {
+      runWorkflow(wf, req.body.context || {}).catch(console.error)
+    }
     res.json({ ok: true, message: 'Workflow triggered' })
   })
 
