@@ -269,6 +269,36 @@ async function executeStepAction(step, run) {
       save()
       break
     }
+    case 'book_appointment': {
+      const { appointmentTypeId, date, time, notes = '' } = step.config || {}
+      if (contact && appointmentTypeId && date && time) {
+        const dayOffsets = { today: 0, tomorrow: 1, in_2_days: 2, in_3_days: 3, in_7_days: 7 }
+        const offset = dayOffsets[date] ?? null
+        const apptDate = offset !== null
+          ? new Date(Date.now() + offset * 86400000).toISOString().split('T')[0]
+          : date
+        const now = new Date().toISOString()
+        const appt = {
+          id: uid('appt'),
+          tenantId: run.tenantId,
+          contactId: contact.id,
+          appointmentTypeId,
+          date: apptDate,
+          time,
+          status: 'confirmed',
+          notes: notes
+            .replace(/\{\{contact\.name\}\}/g, contact?.name || '')
+            .replace(/\{\{contact\.phone\}\}/g, contact?.phone || ''),
+          sessionId: conv?.sessionId || null,
+          createdAt: now,
+          updatedAt: now,
+        }
+        upsert('appointments', appt)
+        save()
+        if (_broadcast) _broadcast({ type: 'appointment', appointment: appt })
+      }
+      break
+    }
     case 'webhook': {
       if (step.config.url) {
         let body

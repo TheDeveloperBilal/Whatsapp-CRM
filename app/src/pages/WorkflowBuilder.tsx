@@ -4,7 +4,7 @@ import {
   ArrowLeft, Clock, MessageSquare, Droplets, GitBranch, Tag, Bot,
   Link2, UserCheck, BellOff, Plus, Save, Play, ChevronUp, ChevronDown,
   X, Trash2, Copy, MoreHorizontal, History, Check, Loader2,
-  Zap, Settings2, ClipboardList, Terminal, FileText, Bell,
+  Zap, Settings2, ClipboardList, Terminal, FileText, Bell, CalendarCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,7 @@ import { formatDistanceToNow } from 'date-fns'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type WfStepType = 'wait' | 'send_message' | 'drip_mode' | 'branch' | 'tag_add'
-  | 'tag_remove' | 'bot_toggle' | 'webhook' | 'assign_to' | 'dnd_toggle' | 'notify_team'
+  | 'tag_remove' | 'bot_toggle' | 'webhook' | 'assign_to' | 'dnd_toggle' | 'notify_team' | 'book_appointment'
 
 interface WfStep {
   id: string
@@ -61,7 +61,8 @@ const STEP_META: Record<WfStepType, StepMeta> = {
   webhook:     { label: 'Webhook',           icon: Link2,        color: '#6b7280', bg: '#f3f4f6', desc: 'Call an external webhook URL' },
   assign_to:   { label: 'Assign To',         icon: UserCheck,    color: '#0891b2', bg: '#cffafe', desc: 'Assign conversation to a team member' },
   dnd_toggle:  { label: 'Enable/Disable DND',icon: BellOff,      color: '#6b7280', bg: '#f3f4f6', desc: 'Toggle Do Not Disturb mode' },
-  notify_team: { label: 'Notify Team',        icon: Bell,         color: '#d97706', bg: '#fef3c7', desc: 'Send in-app notification to all admins/owners' },
+  notify_team:      { label: 'Notify Team',      icon: Bell,         color: '#d97706', bg: '#fef3c7', desc: 'Send in-app notification to all admins/owners' },
+  book_appointment: { label: 'Book Appointment', icon: CalendarCheck, color: '#0891b2', bg: '#cffafe', desc: 'Auto-create a confirmed booking for the contact' },
 }
 
 interface TriggerOption {
@@ -175,6 +176,10 @@ function AddStepButton({ onAdd }: { onAdd: (type: WfStepType) => void }) {
     {
       label: 'Notifications',
       items: [{ type: 'notify_team' as WfStepType }],
+    },
+    {
+      label: 'Booking',
+      items: [{ type: 'book_appointment' as WfStepType }],
     },
     {
       label: 'Integrations',
@@ -415,7 +420,7 @@ function findStepById(steps: WfStep[], id: string): WfStep | null {
 }
 
 function StepConfigPanel({
-  step, allSteps, onClose, onSave, onDelete, onNavigate, agents, tags,
+  step, allSteps, onClose, onSave, onDelete, onNavigate, agents, tags, appointmentTypes,
 }: {
   step: WfStep
   allSteps: WfStep[]
@@ -425,6 +430,7 @@ function StepConfigPanel({
   onNavigate: (dir: 'up' | 'down') => void
   agents: { id: string; username: string; name: string; role: string }[]
   tags: { id: string; label: string; color: string }[]
+  appointmentTypes: { id: string; name: string; duration: number }[]
 }) {
   const m = STEP_META[step.type]
   const Icon = m.icon
@@ -715,6 +721,56 @@ function StepConfigPanel({
           </div>
         )}
 
+        {/* ── Book Appointment ── */}
+        {step.type === 'book_appointment' && (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Appointment type</Label>
+              {appointmentTypes.length > 0 ? (
+                <Select value={config.appointmentTypeId || ''} onValueChange={v => set('appointmentTypeId', v)}>
+                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    {appointmentTypes.map(at => (
+                      <SelectItem key={at.id} value={at.id}>{at.name} ({at.duration} min)</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-[11px] text-destructive">No appointment types — create one in the Appointments page first.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Date</Label>
+              <Select value={config.date || 'tomorrow'} onValueChange={v => set('date', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="tomorrow">Tomorrow</SelectItem>
+                  <SelectItem value="in_2_days">In 2 days</SelectItem>
+                  <SelectItem value="in_3_days">In 3 days</SelectItem>
+                  <SelectItem value="in_7_days">In 7 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Time</Label>
+              <Select value={config.time || '10:00'} onValueChange={v => set('time', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['09:00','10:00','11:00','12:00','14:00','15:00','16:00','17:00'].map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Notes (optional)</Label>
+              <Input value={config.notes || ''} onChange={e => set('notes', e.target.value)} placeholder="Booked via workflow for {{contact.name}}" />
+            </div>
+            <p className="text-[10px] text-muted-foreground">Creates a confirmed booking for the contact automatically when the workflow runs.</p>
+          </div>
+        )}
+
         {/* ── Webhook ── */}
         {step.type === 'webhook' && (
           <>
@@ -933,7 +989,7 @@ const client = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
 export default function WorkflowBuilder() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { tenant, agents, tags } = usePortal()
+  const { tenant, agents, tags, appointmentTypes } = usePortal()
 
   const [name, setName] = useState('Untitled Workflow')
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
@@ -1301,6 +1357,7 @@ export default function WorkflowBuilder() {
             onNavigate={handleNavigate}
             agents={agents}
             tags={tags}
+            appointmentTypes={appointmentTypes}
           />
         )}
         {showVersions && (
