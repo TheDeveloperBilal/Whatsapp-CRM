@@ -172,6 +172,8 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         setAgents(b.agents ?? [])
         setUnreadNotifications(b.unreadNotifications ?? 0)
         setMsgCache({})
+        // Load notification history for the bell dropdown
+        client.listNotifications(tenant.id).then(setNotifications).catch(() => {})
         setBackendOnline(true)
       })
       .catch(() => setBackendOnline(false))
