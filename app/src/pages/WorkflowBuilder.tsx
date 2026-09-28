@@ -250,7 +250,7 @@ function StepCard({
   return (
     <div
       onClick={onSelect}
-      className={`w-64 rounded-lg border-2 bg-background cursor-pointer transition-all hover:shadow-md ${
+      className={`group w-64 rounded-lg border-2 bg-background cursor-pointer transition-all hover:shadow-md ${
         selected ? 'border-primary shadow-md' : 'border-border'
       }`}
     >
