@@ -74,6 +74,13 @@ export function canAccessTenant(user, tid) {
   return user.tenantId === tid
 }
 
+// Returns true if the user can manage (create/edit/delete) resources in a tenant
+export function canManageTenant(user, tid) {
+  if (user.role === 'superadmin') return true
+  if (user.tenantId !== tid) return false
+  return user.role === 'owner' || user.role === 'admin'
+}
+
 // Plan limits
 const PLAN_LIMITS = {
   free: { maxSessions: 1, broadcast: false },

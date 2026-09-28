@@ -43,6 +43,9 @@ import type {
   GatewayProfile,
   DashboardStats,
   ConversationStatus,
+  Department,
+  Agent,
+  Notification,
 } from '@/types/portal'
 
 const fallbackConfig = (tenantId: string): BotConfig => ({
@@ -103,6 +106,10 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([])
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [msgCache, setMsgCache] = useState<Record<string, Message[]>>({})
 
   const [loading, setLoading] = useState(true)
@@ -161,6 +168,9 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         setPaymentLinks(b.paymentLinks ?? [])
         setInvoices(b.invoices ?? [])
         setStats(b.stats)
+        setDepartments(b.departments ?? [])
+        setAgents(b.agents ?? [])
+        setUnreadNotifications(b.unreadNotifications ?? 0)
         setMsgCache({})
         setBackendOnline(true)
       })
@@ -403,9 +413,23 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         case 'invoice.deleted':
           setInvoices((prev) => prev.filter((x) => x.id !== e.id))
           break
+        case 'notification': {
+          const notif = e.notification as Notification
+          if (notif.tenantId !== tenantRef.current) break
+          if (notif.userId !== currentUser?.userId) break
+          setNotifications((prev) => {
+            const exists = prev.some((x) => x.id === notif.id)
+            return exists ? prev : [notif, ...prev]
+          })
+          if (!notif.read) {
+            setUnreadNotifications((n) => n + 1)
+            toast.message(`🔔 ${notif.message}`, { duration: 6000 })
+          }
+          break
+        }
       }
     })
-  }, [client])
+  }, [client, currentUser?.userId])
 
   // ── actions ────────────────────────────────────────────────────────────────
 
@@ -832,6 +856,57 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     await client.deleteInvoice(id).catch(() => {})
   }, [client])
 
+  // ── Departments ────────────────────────────────────────────────────────────
+  const createDepartment = useCallback(async (data: { name: string; color?: string; keywords?: string[] }) => {
+    const dept = await client.createDepartment(tenant.id, data)
+    setDepartments((prev) => [...prev, dept])
+    return dept
+  }, [client, tenant?.id])
+
+  const updateDepartment = useCallback(async (id: string, data: Partial<Department>) => {
+    const dept = await client.updateDepartment(tenant.id, id, data)
+    setDepartments((prev) => prev.map((x) => (x.id === id ? dept : x)))
+  }, [client, tenant?.id])
+
+  const deleteDepartment = useCallback(async (id: string) => {
+    await client.deleteDepartment(tenant.id, id)
+    setDepartments((prev) => prev.filter((x) => x.id !== id))
+  }, [client, tenant?.id])
+
+  // ── Agents ─────────────────────────────────────────────────────────────────
+  const createAgent = useCallback(async (data: { username: string; password: string; name?: string; role?: string; departmentId?: string }) => {
+    const agent = await client.createAgent(tenant.id, data)
+    setAgents((prev) => [...prev, agent])
+    return agent
+  }, [client, tenant?.id])
+
+  const updateAgent = useCallback(async (id: string, data: { name?: string; role?: string; departmentId?: string | null }) => {
+    const agent = await client.updateAgent(tenant.id, id, data)
+    setAgents((prev) => prev.map((x) => (x.id === id ? agent : x)))
+  }, [client, tenant?.id])
+
+  const deleteAgent = useCallback(async (id: string) => {
+    await client.deleteAgent(tenant.id, id)
+    setAgents((prev) => prev.filter((x) => x.id !== id))
+  }, [client, tenant?.id])
+
+  const changeAgentPassword = useCallback(async (id: string, newPassword: string) => {
+    await client.changeAgentPassword(tenant.id, id, newPassword)
+  }, [client, tenant?.id])
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  const markAllNotificationsRead = useCallback(async () => {
+    await client.markAllNotificationsRead(tenant.id)
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    setUnreadNotifications(0)
+  }, [client, tenant?.id])
+
+  const markNotificationRead = useCallback(async (id: string) => {
+    await client.markNotificationRead(tenant.id, id)
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
+    setUnreadNotifications((n) => Math.max(0, n - 1))
+  }, [client, tenant?.id])
+
   const logout = useCallback(() => {
     clearToken()
     window.location.href = '/'
@@ -941,6 +1016,10 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     paymentGateways,
     paymentLinks,
     invoices,
+    departments,
+    agents,
+    notifications,
+    unreadNotifications,
     loading,
     messagesFor,
     ensureMessages,
@@ -1004,6 +1083,15 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     getTenantUsers,
     createTenantUser,
     deleteTenantUser,
+    createDepartment,
+    updateDepartment,
+    deleteDepartment,
+    createAgent,
+    updateAgent,
+    deleteAgent,
+    changeAgentPassword,
+    markAllNotificationsRead,
+    markNotificationRead,
   }
 
   return <PortalCtx.Provider value={value}>{children}</PortalCtx.Provider>

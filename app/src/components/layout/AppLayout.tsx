@@ -5,7 +5,7 @@ import {
   Building2, Settings, MessageSquareDashed, Megaphone, BookOpen, Package,
   LogOut, ShieldCheck, Wrench, MonitorSmartphone, Flame, Zap,
   KanbanSquare, CalendarCheck, CreditCard, BarChart2, Search, Menu,
-  ChevronDown, ServerCog,
+  ChevronDown, ServerCog, Bell, UserCheck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { BusinessType } from '@/types/portal'
@@ -21,6 +21,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { usePortal } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import type { Notification } from '@/types/portal'
 
 // ─── Page title map ───────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ const titles: Record<string, string> = {
   '/broadcast': 'Broadcast Message',
   '/knowledge-base': 'Knowledge Base',
   '/tenants': 'Tenants & Team',
+  '/team': 'Team & Departments',
   '/settings': 'Settings',
   '/system-config': 'System Config',
 }
@@ -262,6 +264,7 @@ export default function AppLayout() {
   const {
     tenants, tenant, setTenantId, sessions, conversations,
     gatewayKind, backendOnline, currentUser, logout,
+    notifications, unreadNotifications, markAllNotificationsRead, markNotificationRead,
   } = usePortal()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -319,6 +322,7 @@ export default function AppLayout() {
     {
       label: 'ADMIN',
       items: [
+        { to: '/team', label: 'Team & Departments', icon: UserCheck },
         ...(isSuperAdmin ? [{ to: '/tenants', label: 'Tenants & Team', icon: Building2 } as NavItem] : []),
         { to: '/settings', label: 'Settings', icon: Settings },
         ...(isSuperAdmin ? [{ to: '/system-config', label: 'System Config', icon: ServerCog } as NavItem] : []),
@@ -401,6 +405,51 @@ export default function AppLayout() {
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
+            {/* Notification bell */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="relative p-2 rounded-xl transition-colors hover:bg-indigo-50"
+                  title="Notifications"
+                >
+                  <Bell className="size-4 text-gray-500" />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute top-1 right-1 size-2 rounded-full bg-red-500" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
+                  {unreadNotifications > 0 && (
+                    <button
+                      onClick={() => markAllNotificationsRead()}
+                      className="text-[11px] text-indigo-600 hover:underline"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <DropdownMenuSeparator />
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-sm text-muted-foreground">No notifications</div>
+                ) : (
+                  notifications.slice(0, 10).map((n: Notification) => (
+                    <DropdownMenuItem
+                      key={n.id}
+                      className={cn('flex flex-col items-start gap-0.5 px-3 py-2.5 cursor-pointer', !n.read && 'bg-indigo-50/60')}
+                      onClick={() => !n.read && markNotificationRead(n.id)}
+                    >
+                      <span className="text-[13px] font-medium text-gray-800 leading-snug">{n.message}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {new Date(n.createdAt).toLocaleString()}
+                      </span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Workspace switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

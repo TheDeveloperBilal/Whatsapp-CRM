@@ -15,9 +15,18 @@ import {
   requireAuth,
   requireSuperAdmin,
   canAccessTenant,
+  canManageTenant,
   getPlanLimits,
   loginRateLimit,
 } from './auth.js'
+
+// Middleware: superadmin OR tenant owner/admin
+function requireTenantAdmin(req, res, next) {
+  const user = req.user
+  if (!user) return res.status(401).json({ error: 'unauthorized' })
+  if (canManageTenant(user, req.params.tid)) return next()
+  return res.status(403).json({ error: 'forbidden' })
+}
 
 // Strip secret key before sending to frontend
 function safeGateway(gw) {
@@ -218,31 +227,45 @@ export function buildApi(broadcast) {
     res.json({ ok: true })
   })
 
-  r.get('/tenants/:tid/users', requireSuperAdmin, (req, res) => {
+  r.get('/tenants/:tid/users', requireAuth, (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const users = collection('users')
       .filter((u) => u.tenantId === req.params.tid)
-      .map((u) => ({ id: u.id, username: u.username, tenantId: u.tenantId, role: u.role }))
+      .map((u) => ({ id: u.id, username: u.username, name: u.name || u.username, tenantId: u.tenantId, role: u.role, departmentId: u.departmentId || null, online: false }))
     res.json(users)
   })
 
-  r.post('/tenants/:tid/users', requireSuperAdmin, (req, res) => {
-    const { username, password, role = 'agent' } = req.body
+  r.post('/tenants/:tid/users', requireAuth, requireTenantAdmin, (req, res) => {
+    const { username, password, role = 'agent', name, departmentId } = req.body
     if (!username || !password) return res.status(400).json({ error: 'username and password required' })
     if (collection('users').find((u) => u.username === username))
       return res.status(409).json({ error: 'username already taken' })
     const user = {
       id: uid('usr'),
       username,
+      name: name || username,
       passwordHash: hashPassword(password),
       tenantId: req.params.tid,
       role,
+      departmentId: departmentId || null,
     }
     upsert('users', user)
     save()
-    res.json({ id: user.id, username: user.username, tenantId: user.tenantId, role: user.role })
+    res.json({ id: user.id, username: user.username, name: user.name, tenantId: user.tenantId, role: user.role, departmentId: user.departmentId })
   })
 
-  r.delete('/tenants/:tid/users/:uid', requireSuperAdmin, (req, res) => {
+  r.put('/tenants/:tid/users/:uid', requireAuth, requireTenantAdmin, (req, res) => {
+    const user = collection('users').find((u) => u.id === req.params.uid && u.tenantId === req.params.tid)
+    if (!user) return res.status(404).json({ error: 'not found' })
+    const { name, role, departmentId } = req.body
+    if (name) user.name = name
+    if (role) user.role = role
+    if (departmentId !== undefined) user.departmentId = departmentId
+    save()
+    res.json({ id: user.id, username: user.username, name: user.name, tenantId: user.tenantId, role: user.role, departmentId: user.departmentId })
+  })
+
+  r.delete('/tenants/:tid/users/:uid', requireAuth, requireTenantAdmin, (req, res) => {
     const user = collection('users').find((u) => u.id === req.params.uid && u.tenantId === req.params.tid)
     if (!user) return res.status(404).json({ error: 'not found' })
     remove('users', (u) => u.id === req.params.uid)
@@ -250,7 +273,7 @@ export function buildApi(broadcast) {
     res.json({ ok: true })
   })
 
-  r.patch('/tenants/:tid/users/:uid/password', requireSuperAdmin, (req, res) => {
+  r.patch('/tenants/:tid/users/:uid/password', requireAuth, requireTenantAdmin, (req, res) => {
     const { newPassword } = req.body
     if (!newPassword) return res.status(400).json({ error: 'newPassword required' })
     const user = collection('users').find((u) => u.id === req.params.uid && u.tenantId === req.params.tid)
@@ -269,6 +292,67 @@ export function buildApi(broadcast) {
     user.passwordHash = hashPassword(newPassword)
     save()
     res.json({ ok: true })
+  })
+
+  // ── Departments ─────────────────────────────────────────────────────────────
+  r.get('/tenants/:tid/departments', requireAuth, (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    res.json((collection('departments') || []).filter(d => d.tenantId === req.params.tid))
+  })
+
+  r.post('/tenants/:tid/departments', requireAuth, requireTenantAdmin, (req, res) => {
+    const { name, color = '#6366f1', keywords = [] } = req.body
+    if (!name) return res.status(400).json({ error: 'name required' })
+    const dept = { id: uid('dept'), tenantId: req.params.tid, name, color, keywords, createdAt: new Date().toISOString() }
+    upsert('departments', dept)
+    save()
+    res.json(dept)
+  })
+
+  r.put('/tenants/:tid/departments/:did', requireAuth, requireTenantAdmin, (req, res) => {
+    const dept = (collection('departments') || []).find(d => d.id === req.params.did && d.tenantId === req.params.tid)
+    if (!dept) return res.status(404).json({ error: 'not found' })
+    const { name, color, keywords } = req.body
+    if (name !== undefined) dept.name = name
+    if (color !== undefined) dept.color = color
+    if (keywords !== undefined) dept.keywords = keywords
+    save()
+    res.json(dept)
+  })
+
+  r.delete('/tenants/:tid/departments/:did', requireAuth, requireTenantAdmin, (req, res) => {
+    const dept = (collection('departments') || []).find(d => d.id === req.params.did && d.tenantId === req.params.tid)
+    if (!dept) return res.status(404).json({ error: 'not found' })
+    remove('departments', d => d.id === req.params.did)
+    save()
+    res.json({ ok: true })
+  })
+
+  // ── Notifications ────────────────────────────────────────────────────────────
+  r.get('/tenants/:tid/notifications', requireAuth, (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    const notifs = (collection('notifications') || [])
+      .filter(n => n.tenantId === req.params.tid && n.userId === req.user.userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50)
+    res.json(notifs)
+  })
+
+  r.put('/tenants/:tid/notifications/read-all', requireAuth, (req, res) => {
+    if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
+    ;(collection('notifications') || [])
+      .filter(n => n.tenantId === req.params.tid && n.userId === req.user.userId && !n.read)
+      .forEach(n => { n.read = true })
+    save()
+    res.json({ ok: true })
+  })
+
+  r.put('/tenants/:tid/notifications/:nid/read', requireAuth, (req, res) => {
+    const notif = (collection('notifications') || []).find(n => n.id === req.params.nid && n.userId === req.user.userId)
+    if (!notif) return res.status(404).json({ error: 'not found' })
+    notif.read = true
+    save()
+    res.json(notif)
   })
 
   r.get('/tenants/:tid/bootstrap', (req, res) => {
@@ -300,6 +384,12 @@ export function buildApi(broadcast) {
       paymentGateways: (collection('paymentGateways') || []).filter((g) => g.tenantId === tid).map(safeGateway),
       paymentLinks: (collection('paymentLinks') || []).filter((p) => p.tenantId === tid),
       invoices: (collection('invoices') || []).filter((i) => i.tenantId === tid),
+      departments: (collection('departments') || []).filter((d) => d.tenantId === tid),
+      agents: (collection('users') || [])
+        .filter((u) => u.tenantId === tid)
+        .map((u) => ({ id: u.id, username: u.username, name: u.name || u.username, role: u.role, departmentId: u.departmentId || null })),
+      unreadNotifications: (collection('notifications') || [])
+        .filter((n) => n.tenantId === tid && n.userId === req.user.userId && !n.read).length,
       stats,
     })
   })
@@ -365,12 +455,30 @@ export function buildApi(broadcast) {
     const prevStatus = conv.status
     // Whitelist — never allow tenantId, contactId, sessionId to be overwritten
     const { status, botEnabled, assigneeId, unread } = req.body
+    const prevAssigneeId = conv.assigneeId
     if (status !== undefined) conv.status = status
     if (botEnabled !== undefined) conv.botEnabled = botEnabled
     if (assigneeId !== undefined) conv.assigneeId = assigneeId
     if (unread !== undefined) conv.unread = unread
     save()
     broadcast({ type: 'conversation', conversation: conv })
+    // Notify assignee if assignment changed
+    if (assigneeId && assigneeId !== prevAssigneeId) {
+      const contact = collection('contacts').find((c) => c.id === conv.contactId)
+      const notif = {
+        id: uid('notif'),
+        tenantId: conv.tenantId,
+        userId: assigneeId,
+        type: 'assignment',
+        message: `Chat with ${contact?.name || 'a contact'} has been assigned to you`,
+        conversationId: conv.id,
+        read: false,
+        createdAt: new Date().toISOString(),
+      }
+      upsert('notifications', notif)
+      save()
+      broadcast({ type: 'notification', notification: notif })
+    }
     if (conv.status === 'resolved' && prevStatus !== 'resolved') {
       const contact = collection('contacts').find((c) => c.id === conv.contactId)
       const session = collection('sessions').find((s) => s.id === conv.sessionId)

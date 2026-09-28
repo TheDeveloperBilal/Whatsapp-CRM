@@ -316,6 +316,21 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   }, [])
   const deleteTenantUser = useCallback(async (_tenantId: string, _userId: string) => {}, [])
 
+  // Stub team management (not used in demo mode)
+  const createDepartment = useCallback(async (data: { name: string; color?: string; keywords?: string[] }) => ({
+    id: `dept${Date.now()}`, tenantId, name: data.name, color: data.color ?? '#6366f1', keywords: data.keywords ?? [], createdAt: new Date().toISOString(),
+  }), [tenantId])
+  const updateDepartment = useCallback(async (_id: string, _data: any) => {}, [])
+  const deleteDepartment = useCallback(async (_id: string) => {}, [])
+  const createAgent = useCallback(async (data: any) => ({
+    id: `ag${Date.now()}`, username: data.username, name: data.name ?? data.username, tenantId, role: data.role ?? 'agent', departmentId: data.departmentId ?? null,
+  }), [tenantId])
+  const updateAgent = useCallback(async (_id: string, _data: any) => {}, [])
+  const deleteAgent = useCallback(async (_id: string) => {}, [])
+  const changeAgentPassword = useCallback(async (_id: string, _pw: string) => {}, [])
+  const markAllNotificationsRead = useCallback(async () => {}, [])
+  const markNotificationRead = useCallback(async (_id: string) => {}, [])
+
   const createIntent = useCallback(async (data: Omit<IntentRule, 'id' | 'tenantId' | 'matchCount' | 'createdAt'>) => {
     const intent: IntentRule = { ...data, id: `int${Date.now()}`, tenantId, matchCount: 0, createdAt: new Date().toISOString() }
     setIntents((prev) => [...prev, intent])
@@ -533,6 +548,19 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     getTenantUsers,
     createTenantUser,
     deleteTenantUser,
+    departments: [],
+    agents: [],
+    notifications: [],
+    unreadNotifications: 0,
+    createDepartment,
+    updateDepartment,
+    deleteDepartment,
+    createAgent,
+    updateAgent,
+    deleteAgent,
+    changeAgentPassword,
+    markAllNotificationsRead,
+    markNotificationRead,
   }
 
   return <PortalCtx.Provider value={value}>{children}</PortalCtx.Provider>

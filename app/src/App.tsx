@@ -24,6 +24,7 @@ import Settings from '@/pages/Settings'
 import SystemConfig from '@/pages/SystemConfig'
 import Workflows from '@/pages/Workflows'
 import WorkflowBuilder from '@/pages/WorkflowBuilder'
+import Team from '@/pages/Team'
 import Login from '@/pages/Login'
 import { isLoggedIn } from '@/lib/auth'
 
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/payments" element={<Payments />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/knowledge-base" element={<KnowledgeBase />} />
+          <Route path="/team" element={<Team />} />
           <Route path="/tenants" element={<Tenants />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/system-config" element={<SystemConfig />} />

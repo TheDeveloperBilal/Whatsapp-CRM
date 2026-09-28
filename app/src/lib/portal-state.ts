@@ -27,6 +27,9 @@ import type {
   GatewayProfile,
   DashboardStats,
   ConversationStatus,
+  Department,
+  Agent,
+  Notification,
 } from '@/types/portal'
 import type { TenantUser, PortalClient } from '@/lib/backend'
 
@@ -66,6 +69,10 @@ export interface PortalState {
   paymentGateways: PaymentGateway[]
   paymentLinks: PaymentLink[]
   invoices: Invoice[]
+  departments: Department[]
+  agents: Agent[]
+  notifications: Notification[]
+  unreadNotifications: number
   loading: boolean
   // actions
   messagesFor: (conversationId: string) => Message[]
@@ -140,4 +147,16 @@ export interface PortalState {
   getTenantUsers: (tenantId: string) => Promise<TenantUser[]>
   createTenantUser: (tenantId: string, data: { username: string; password: string; role?: string }) => Promise<TenantUser>
   deleteTenantUser: (tenantId: string, userId: string) => Promise<void>
+  // departments
+  createDepartment: (data: { name: string; color?: string; keywords?: string[] }) => Promise<Department>
+  updateDepartment: (id: string, data: Partial<Department>) => Promise<void>
+  deleteDepartment: (id: string) => Promise<void>
+  // agents
+  createAgent: (data: { username: string; password: string; name?: string; role?: string; departmentId?: string }) => Promise<Agent>
+  updateAgent: (id: string, data: { name?: string; role?: string; departmentId?: string | null }) => Promise<void>
+  deleteAgent: (id: string) => Promise<void>
+  changeAgentPassword: (id: string, newPassword: string) => Promise<void>
+  // notifications
+  markAllNotificationsRead: () => Promise<void>
+  markNotificationRead: (id: string) => Promise<void>
 }

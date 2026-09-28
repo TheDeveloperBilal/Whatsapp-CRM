@@ -30,6 +30,9 @@ import type {
   DashboardStats,
   Workflow,
   WorkflowRun,
+  Department,
+  Agent,
+  Notification,
 } from '@/types/portal'
 import { getToken, clearToken } from '@/lib/auth'
 
@@ -54,6 +57,9 @@ export interface Bootstrap {
   paymentLinks: PaymentLink[]
   invoices: Invoice[]
   stats: DashboardStats
+  departments: Department[]
+  agents: Agent[]
+  unreadNotifications: number
 }
 
 export type ServerEvent =
@@ -289,6 +295,48 @@ export class PortalClient {
   }
   deleteTenantUser(tenantId: string, userId: string) {
     return this.req<{ ok: boolean }>(`/tenants/${tenantId}/users/${userId}`, { method: 'DELETE' })
+  }
+
+  // ── Departments ──
+  listDepartments(tenantId: string) {
+    return this.req<Department[]>(`/tenants/${tenantId}/departments`)
+  }
+  createDepartment(tenantId: string, data: { name: string; color?: string; keywords?: string[] }) {
+    return this.req<Department>(`/tenants/${tenantId}/departments`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateDepartment(tenantId: string, id: string, data: Partial<Department>) {
+    return this.req<Department>(`/tenants/${tenantId}/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+  deleteDepartment(tenantId: string, id: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/departments/${id}`, { method: 'DELETE' })
+  }
+
+  // ── Agents ──
+  listAgents(tenantId: string) {
+    return this.req<Agent[]>(`/tenants/${tenantId}/users`)
+  }
+  createAgent(tenantId: string, data: { username: string; password: string; name?: string; role?: string; departmentId?: string }) {
+    return this.req<Agent>(`/tenants/${tenantId}/users`, { method: 'POST', body: JSON.stringify(data) })
+  }
+  updateAgent(tenantId: string, id: string, data: { name?: string; role?: string; departmentId?: string | null }) {
+    return this.req<Agent>(`/tenants/${tenantId}/users/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+  deleteAgent(tenantId: string, id: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/users/${id}`, { method: 'DELETE' })
+  }
+  changeAgentPassword(tenantId: string, id: string, newPassword: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ newPassword }) })
+  }
+
+  // ── Notifications ──
+  listNotifications(tenantId: string) {
+    return this.req<Notification[]>(`/tenants/${tenantId}/notifications`)
+  }
+  markAllNotificationsRead(tenantId: string) {
+    return this.req<{ ok: boolean }>(`/tenants/${tenantId}/notifications/read-all`, { method: 'PUT' })
+  }
+  markNotificationRead(tenantId: string, id: string) {
+    return this.req<Notification>(`/tenants/${tenantId}/notifications/${id}/read`, { method: 'PUT' })
   }
 
   // ── Campaigns ──

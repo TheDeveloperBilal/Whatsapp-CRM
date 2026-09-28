@@ -111,6 +111,49 @@ function phoneFromJid(jid) {
   return `+${digits}`
 }
 
+// Auto-assign a conversation to the best-matching agent based on department keywords
+function autoAssign(tenantId, conv, messageBody) {
+  if (conv.assigneeId) return // already assigned
+  const departments = (collection('departments') || []).filter(d => d.tenantId === tenantId)
+  if (!departments.length) return
+
+  const bodyLower = (messageBody || '').toLowerCase()
+  let matchedDept = null
+  let bestScore = 0
+  for (const dept of departments) {
+    const score = (dept.keywords || []).filter(kw => bodyLower.includes(kw.toLowerCase())).length
+    if (score > bestScore) { bestScore = score; matchedDept = dept }
+  }
+  // Fall back to first department if no keyword match
+  if (!matchedDept) matchedDept = departments[0]
+
+  const agents = (collection('users') || []).filter(u => u.tenantId === tenantId && u.departmentId === matchedDept.id)
+  if (!agents.length) return
+
+  // Round-robin: pick agent with fewest open assigned conversations
+  const openConvs = (collection('conversations') || []).filter(c => c.tenantId === tenantId && c.status !== 'resolved')
+  const counts = Object.fromEntries(agents.map(a => [a.id, 0]))
+  for (const c of openConvs) { if (c.assigneeId && counts[c.assigneeId] !== undefined) counts[c.assigneeId]++ }
+  const assignee = agents.sort((a, b) => counts[a.id] - counts[b.id])[0]
+
+  conv.assigneeId = assignee.id
+  const contact = collection('contacts').find(c => c.id === conv.contactId)
+  const notif = {
+    id: uid('notif'),
+    tenantId,
+    userId: assignee.id,
+    type: 'assignment',
+    message: `New chat from ${contact?.name || 'a contact'} auto-assigned to you`,
+    conversationId: conv.id,
+    read: false,
+    createdAt: new Date().toISOString(),
+  }
+  upsert('notifications', notif)
+  save()
+  broadcast({ type: 'notification', notification: notif })
+  broadcast({ type: 'conversation', conversation: conv })
+}
+
 function conversationFor(session, jid, pushName) {
   const tenantId = session.tenantId
   let contact = collection('contacts').find((c) => c.tenantId === tenantId && c.chatId === jid)
@@ -279,6 +322,8 @@ waEvents.on('message', async (e) => {
       runAutomations('message.first', ctx, broadcast).catch(
         (err) => console.error('[automation message.first]:', err.message),
       )
+      // Auto-assign on first message if no assignee yet
+      autoAssign(session.tenantId, conv, e.text)
     }
     runIntentRouting(ctx, broadcast).catch(
       (err) => console.error('[intent routing]:', err.message),

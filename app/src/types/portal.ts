@@ -21,6 +21,36 @@ export interface TeamMember {
   online: boolean
 }
 
+export interface Department {
+  id: string
+  tenantId: string
+  name: string
+  color: string
+  keywords: string[]
+  createdAt: string
+}
+
+export interface Agent {
+  id: string
+  username: string
+  name: string
+  tenantId?: string
+  role: 'owner' | 'admin' | 'agent'
+  departmentId: string | null
+  online?: boolean
+}
+
+export interface Notification {
+  id: string
+  tenantId: string
+  userId: string
+  type: 'assignment' | 'mention' | 'system'
+  message: string
+  conversationId?: string
+  read: boolean
+  createdAt: string
+}
+
 export interface Tenant {
   id: string
   name: string
