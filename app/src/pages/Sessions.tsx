@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { Plus, Smartphone, QrCode, RefreshCw, Trash2 } from 'lucide-react'
+import { Plus, Smartphone, QrCode, RefreshCw, Trash2, Users, X, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +13,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -29,12 +35,27 @@ const statusVariant = (s: WaSession['status']) =>
   s === 'connected' ? 'default' : s === 'disconnected' ? 'destructive' : 'secondary'
 
 export default function Sessions() {
-  const { sessions, createSession, deleteSession, startSession, gatewayKind, profile } = usePortal()
+  const { sessions, createSession, deleteSession, startSession, gatewayKind, profile, agents, client } = usePortal()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [engine, setEngine] = useState('baileys')
   const [connectingId, setConnectingId] = useState<string | null>(null)
   const [qrImage, setQrImage] = useState<string | null>(null)
+  const [assignedMap, setAssignedMap] = useState<Record<string, string[]>>({})
+
+  // sync assignedMap from session data
+  useEffect(() => {
+    const map: Record<string, string[]> = {}
+    for (const s of sessions) map[s.id] = s.assignedTo || []
+    setAssignedMap(map)
+  }, [sessions])
+
+  const toggleAgent = async (sessionId: string, agentId: string) => {
+    const current = assignedMap[sessionId] || []
+    const next = current.includes(agentId) ? current.filter(id => id !== agentId) : [...current, agentId]
+    setAssignedMap(p => ({ ...p, [sessionId]: next }))
+    await client.updateSession(sessionId, { assignedTo: next }).catch(() => {})
+  }
 
   const active = sessions.find((s) => s.id === connectingId)
   const live = profile.kind === 'portal'
@@ -138,6 +159,54 @@ export default function Sessions() {
                 <span>Messages today</span>
                 <span>{s.messagesToday}</span>
               </div>
+              {/* Team assignment */}
+              {agents.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Users className="size-3" />
+                    <span>Assigned to</span>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="w-full flex items-center justify-between text-xs border rounded-md px-2.5 py-1.5 hover:bg-muted/50 transition-colors">
+                        <span className="truncate">
+                          {(assignedMap[s.id] || []).length === 0
+                            ? 'All team members'
+                            : (assignedMap[s.id] || []).map(id => agents.find(a => a.id === id)?.name || id).join(', ')}
+                        </span>
+                        <ChevronDown className="size-3 ml-1 flex-shrink-0 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56">
+                      {agents.map(a => (
+                        <DropdownMenuCheckboxItem
+                          key={a.id}
+                          checked={(assignedMap[s.id] || []).includes(a.id)}
+                          onCheckedChange={() => toggleAgent(s.id, a.id)}
+                        >
+                          <div>
+                            <span className="font-medium">{a.name || a.username}</span>
+                            <span className="ml-1 text-[10px] text-muted-foreground capitalize">· {a.role}</span>
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {(assignedMap[s.id] || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {(assignedMap[s.id] || []).map(id => {
+                        const a = agents.find(x => x.id === id)
+                        return (
+                          <span key={id} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded px-1.5 py-0.5">
+                            {a?.name || id}
+                            <button onClick={() => toggleAgent(s.id, id)} className="hover:text-destructive"><X className="size-2.5" /></button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button
                   variant={s.status === 'connected' ? 'outline' : 'default'}

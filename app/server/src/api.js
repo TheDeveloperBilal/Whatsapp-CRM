@@ -620,6 +620,16 @@ export function buildApi(broadcast) {
     }
   })
 
+  r.patch('/sessions/:sid', (req, res) => {
+    const s = collection('sessions').find((x) => x.id === req.params.sid)
+    if (!s) return res.status(404).json({ error: 'not found' })
+    const allowed = ['name', 'assignedTo']
+    for (const k of allowed) if (req.body[k] !== undefined) s[k] = req.body[k]
+    save()
+    broadcast({ type: 'session', session: s })
+    res.json(s)
+  })
+
   r.delete('/sessions/:sid', async (req, res) => {
     await stopSession(req.params.sid).catch(() => {})
     remove('sessions', (s) => s.id === req.params.sid)

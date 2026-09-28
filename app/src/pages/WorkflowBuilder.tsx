@@ -4,7 +4,7 @@ import {
   ArrowLeft, Clock, MessageSquare, Droplets, GitBranch, Tag, Bot,
   Link2, UserCheck, BellOff, Plus, Save, Play, ChevronUp, ChevronDown,
   X, Trash2, Copy, MoreHorizontal, History, Check, Loader2,
-  Zap, Settings2, ClipboardList, Terminal, FileText,
+  Zap, Settings2, ClipboardList, Terminal, FileText, Bell,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,7 @@ import { formatDistanceToNow } from 'date-fns'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type WfStepType = 'wait' | 'send_message' | 'drip_mode' | 'branch' | 'tag_add'
-  | 'tag_remove' | 'bot_toggle' | 'webhook' | 'assign_to' | 'dnd_toggle'
+  | 'tag_remove' | 'bot_toggle' | 'webhook' | 'assign_to' | 'dnd_toggle' | 'notify_team'
 
 interface WfStep {
   id: string
@@ -61,6 +61,7 @@ const STEP_META: Record<WfStepType, StepMeta> = {
   webhook:     { label: 'Webhook',           icon: Link2,        color: '#6b7280', bg: '#f3f4f6', desc: 'Call an external webhook URL' },
   assign_to:   { label: 'Assign To',         icon: UserCheck,    color: '#0891b2', bg: '#cffafe', desc: 'Assign conversation to a team member' },
   dnd_toggle:  { label: 'Enable/Disable DND',icon: BellOff,      color: '#6b7280', bg: '#f3f4f6', desc: 'Toggle Do Not Disturb mode' },
+  notify_team: { label: 'Notify Team',        icon: Bell,         color: '#d97706', bg: '#fef3c7', desc: 'Send in-app notification to all admins/owners' },
 }
 
 interface TriggerOption {
@@ -170,6 +171,10 @@ function AddStepButton({ onAdd }: { onAdd: (type: WfStepType) => void }) {
         { type: 'dnd_toggle' as WfStepType },
         { type: 'assign_to' as WfStepType },
       ],
+    },
+    {
+      label: 'Notifications',
+      items: [{ type: 'notify_team' as WfStepType }],
     },
     {
       label: 'Integrations',
@@ -549,13 +554,21 @@ function StepConfigPanel({
         {step.type === 'send_message' && (
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Message</Label>
+            <div className="flex flex-wrap gap-1 mb-1">
+              {[['{{contact.name}}','Name'],['{{contact.phone}}','Phone']].map(([v,l]) => (
+                <button key={v} type="button"
+                  onClick={() => set('message', (config.message || '') + v)}
+                  className="text-[10px] border rounded px-1.5 py-0.5 hover:bg-primary hover:text-primary-foreground transition-colors"
+                >+ {l}</button>
+              ))}
+            </div>
             <Textarea
               value={config.message || ''}
               onChange={e => set('message', e.target.value)}
               className="min-h-28 text-sm"
-              placeholder="Hello {{contact.name}}, welcome!"
+              placeholder="Hello {{contact.name}}, welcome to our service!"
             />
-            <p className="text-[10px] text-muted-foreground">Variables: {'{{contact.name}}'}, {'{{contact.phone}}'}</p>
+            <p className="text-[10px] text-muted-foreground">Click a variable above to insert it into the message.</p>
           </div>
         )}
 
@@ -680,6 +693,28 @@ function StepConfigPanel({
           </div>
         )}
 
+        {/* ── Notify Team ── */}
+        {step.type === 'notify_team' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Notification message</Label>
+            <div className="flex flex-wrap gap-1 mb-1">
+              {[['{{contact.name}}','Name'],['{{contact.phone}}','Phone']].map(([v,l]) => (
+                <button key={v} type="button"
+                  onClick={() => set('message', (config.message || '') + v)}
+                  className="text-[10px] border rounded px-1.5 py-0.5 hover:bg-primary hover:text-primary-foreground transition-colors"
+                >+ {l}</button>
+              ))}
+            </div>
+            <Textarea
+              value={config.message || ''}
+              onChange={e => set('message', e.target.value)}
+              className="min-h-20 text-sm"
+              placeholder="New qualified lead from {{contact.name}}"
+            />
+            <p className="text-[10px] text-muted-foreground">Sends an in-app notification to all admin and owner team members.</p>
+          </div>
+        )}
+
         {/* ── Webhook ── */}
         {step.type === 'webhook' && (
           <>
@@ -795,6 +830,27 @@ function TriggerConfigPanel({ trigger, onClose, onSave, tags }: {
             <Label className="text-xs font-medium">Keyword filter (optional — leave blank for every message)</Label>
             <Input value={config.keyword || ''} onChange={e => set('keyword', e.target.value)} placeholder="e.g. help, support" />
             <p className="text-[10px] text-muted-foreground">Workflow fires only when the inbound message contains this word.</p>
+          </div>
+        )}
+
+        {type === 'contact.created' && tags.length > 0 && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Filter by tag (optional)</Label>
+            <Select value={config.tagFilter || '_any'} onValueChange={v => set('tagFilter', v === '_any' ? '' : v)}>
+              <SelectTrigger><SelectValue placeholder="Any contact" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_any">— Any contact —</SelectItem>
+                {tags.map(t => (
+                  <SelectItem key={t.id} value={t.label}>
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 rounded-full inline-block" style={{ background: t.color }} />
+                      {t.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">Only fires when the created contact has this tag.</p>
           </div>
         )}
 

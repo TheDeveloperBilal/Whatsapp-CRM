@@ -180,6 +180,12 @@ export class PortalClient {
       body: JSON.stringify({ tenantId, name }),
     })
   }
+  updateSession(sessionId: string, patch: { name?: string; assignedTo?: string[] }) {
+    return this.req<WaSession>(`/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
   startSession(sessionId: string) {
     return this.req<WaSession>(`/sessions/${sessionId}/start`, { method: 'POST' })
   }

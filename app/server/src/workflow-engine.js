@@ -246,6 +246,29 @@ async function executeStepAction(step, run) {
       }
       break
     }
+    case 'notify_team': {
+      const msg = (step.config?.message || 'Workflow notification')
+        .replace(/\{\{contact\.name\}\}/g, contact?.name || '')
+        .replace(/\{\{contact\.phone\}\}/g, contact?.phone || '')
+      const allUsers = collection('users') || []
+      const tenantUsers = allUsers.filter(u => u.tenantId === run.tenantId && ['owner','admin'].includes(u.role))
+      for (const u of tenantUsers) {
+        const notif = {
+          id: uid('notif'),
+          tenantId: run.tenantId,
+          userId: u.id,
+          type: 'workflow',
+          message: msg,
+          conversationId: run.context.conversationId || null,
+          read: false,
+          createdAt: new Date().toISOString(),
+        }
+        upsert('notifications', notif)
+        if (_broadcast) _broadcast({ type: 'notification', notification: notif })
+      }
+      save()
+      break
+    }
     case 'webhook': {
       if (step.config.url) {
         let body
@@ -410,6 +433,34 @@ function parseDelay(amount, unit) {
   }
 }
 
+// ── Check trigger filters before running ──────────────────────────────────────
+function passesTriggerFilters(wf, triggerType, context) {
+  const cfg = wf.trigger?.config || {}
+
+  if (triggerType === 'tag.added' || triggerType === 'tag.removed') {
+    if (cfg.tag && context.tagLabel && cfg.tag.toLowerCase() !== context.tagLabel.toLowerCase()) return false
+  }
+
+  if (triggerType === 'message.received') {
+    if (cfg.keyword) {
+      const body = (context.messageBody || '').toLowerCase()
+      if (!body.includes(cfg.keyword.toLowerCase())) return false
+    }
+  }
+
+  if (triggerType === 'contact.created') {
+    if (cfg.tagFilter) {
+      const contact = collection('contacts').find(c => c.id === context.contactId)
+      const tagIds = contact?.tags || []
+      const allTags = collection('tags') || []
+      const tagLabels = tagIds.map(tid => (allTags.find(t => t.id === tid)?.label || '').toLowerCase())
+      if (!tagLabels.includes(cfg.tagFilter.toLowerCase())) return false
+    }
+  }
+
+  return true
+}
+
 // ── Fire trigger: dispatches to V1 or V2 based on workflow format ─────────────
 export function fireTrigger(tenantId, triggerType, context = {}) {
   const workflows = collection('workflows').filter(
@@ -418,6 +469,7 @@ export function fireTrigger(tenantId, triggerType, context = {}) {
       && (w.triggerType === triggerType || w.trigger?.type === triggerType)
   )
   for (const wf of workflows) {
+    if (!passesTriggerFilters(wf, triggerType, context)) continue
     if (Array.isArray(wf.steps)) {
       runWorkflowV2(wf, context).catch(console.error)
     } else if (wf.nodes) {

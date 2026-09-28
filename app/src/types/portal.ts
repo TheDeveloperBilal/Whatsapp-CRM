@@ -83,6 +83,7 @@ export interface WaSession {
   qrCode?: string // data-url or raw QR payload while status === 'qr'
   messagesToday: number
   lastSeen?: string
+  assignedTo?: string[] // user IDs assigned to manage this session
 }
 
 export interface Tag {
