@@ -175,6 +175,7 @@ export function collection(name) {
 }
 
 export function upsert(name, row, key = 'id') {
+  if (!db[name]) db[name] = []
   const list = db[name]
   const i = list.findIndex((r) => r[key] === row[key])
   if (i >= 0) list[i] = { ...list[i], ...row }
@@ -184,6 +185,7 @@ export function upsert(name, row, key = 'id') {
 }
 
 export function remove(name, predicate) {
+  if (!db[name]) return
   db[name] = db[name].filter((r) => !predicate(r))
   save()
 }
