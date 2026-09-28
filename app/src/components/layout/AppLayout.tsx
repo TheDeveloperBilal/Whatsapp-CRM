@@ -274,6 +274,7 @@ export default function AppLayout() {
   const unread = conversations.reduce((n, c) => n + c.unread, 0)
   const connected = sessions.filter(s => s.status === 'connected').length
   const isSuperAdmin = currentUser?.role === 'superadmin'
+  const isAgent = currentUser?.role === 'agent'
   const businessType: BusinessType = (tenant.businessType ?? 'service') as BusinessType
   const btMeta = BUSINESS_TYPE_META[businessType] ?? BUSINESS_TYPE_META.service
   const productIcon =
@@ -281,54 +282,66 @@ export default function AppLayout() {
     : businessType === 'digital' ? MonitorSmartphone
     : Package
 
-  const navGroups: NavGroup[] = [
-    {
-      label: 'MAIN',
-      items: [
-        { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-        { to: '/inbox', label: 'Inbox', icon: MessagesSquare, badge: unread },
-        { to: '/contacts', label: 'Contacts', icon: Users },
-        { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
-      ],
-    },
-    {
-      label: 'MESSAGING',
-      items: [
-        { to: '/bots', label: 'AI Auto-Responder', icon: Bot },
-        { to: '/sessions', label: 'WA Sessions', icon: Smartphone, badge: connected },
-        { to: '/automation', label: 'Automation', icon: Workflow },
-        { to: '/workflows', label: 'Workflows', icon: Zap },
-        { to: '/intent-routing', label: 'Intent Routing', icon: Zap },
-        { to: '/campaigns', label: 'Campaigns', icon: Flame },
-        { to: '/broadcast', label: 'Broadcast', icon: Megaphone },
-        { to: '/canned-responses', label: 'Canned Responses', icon: MessageSquareDashed },
-      ],
-    },
-    {
-      label: 'COMMERCE',
-      items: [
-        { to: '/products', label: btMeta.productLabel, icon: productIcon },
-        { to: '/payments', label: 'Payments', icon: CreditCard },
-        { to: '/booking', label: 'Booking', icon: CalendarCheck },
-      ],
-    },
-    {
-      label: 'INSIGHTS',
-      items: [
-        { to: '/analytics', label: 'Analytics', icon: BarChart2 },
-        { to: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
-      ],
-    },
-    {
-      label: 'ADMIN',
-      items: [
-        { to: '/team', label: 'Team & Departments', icon: UserCheck },
-        ...(isSuperAdmin ? [{ to: '/tenants', label: 'Tenants & Team', icon: Building2 } as NavItem] : []),
-        { to: '/settings', label: 'Settings', icon: Settings },
-        ...(isSuperAdmin ? [{ to: '/system-config', label: 'System Config', icon: ServerCog } as NavItem] : []),
-      ],
-    },
-  ]
+  // Agents see a stripped-down nav: just their assigned chats + contacts
+  const navGroups: NavGroup[] = isAgent
+    ? [
+        {
+          label: 'MAIN',
+          items: [
+            { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+            { to: '/inbox', label: 'My Chats', icon: MessagesSquare, badge: unread },
+            { to: '/contacts', label: 'Contacts', icon: Users },
+          ],
+        },
+      ]
+    : [
+        {
+          label: 'MAIN',
+          items: [
+            { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+            { to: '/inbox', label: 'Inbox', icon: MessagesSquare, badge: unread },
+            { to: '/contacts', label: 'Contacts', icon: Users },
+            { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
+          ],
+        },
+        {
+          label: 'MESSAGING',
+          items: [
+            { to: '/bots', label: 'AI Auto-Responder', icon: Bot },
+            { to: '/sessions', label: 'WA Sessions', icon: Smartphone, badge: connected },
+            { to: '/automation', label: 'Automation', icon: Workflow },
+            { to: '/workflows', label: 'Workflows', icon: Zap },
+            { to: '/intent-routing', label: 'Intent Routing', icon: Zap },
+            { to: '/campaigns', label: 'Campaigns', icon: Flame },
+            { to: '/broadcast', label: 'Broadcast', icon: Megaphone },
+            { to: '/canned-responses', label: 'Canned Responses', icon: MessageSquareDashed },
+          ],
+        },
+        {
+          label: 'COMMERCE',
+          items: [
+            { to: '/products', label: btMeta.productLabel, icon: productIcon },
+            { to: '/payments', label: 'Payments', icon: CreditCard },
+            { to: '/booking', label: 'Booking', icon: CalendarCheck },
+          ],
+        },
+        {
+          label: 'INSIGHTS',
+          items: [
+            { to: '/analytics', label: 'Analytics', icon: BarChart2 },
+            { to: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
+          ],
+        },
+        {
+          label: 'ADMIN',
+          items: [
+            { to: '/team', label: 'Team & Departments', icon: UserCheck },
+            ...(isSuperAdmin ? [{ to: '/tenants', label: 'Tenants & Team', icon: Building2 } as NavItem] : []),
+            { to: '/settings', label: 'Settings', icon: Settings },
+            ...(isSuperAdmin ? [{ to: '/system-config', label: 'System Config', icon: ServerCog } as NavItem] : []),
+          ],
+        },
+      ]
 
   const sidebarProps: SidebarPaneProps = {
     groups: navGroups,

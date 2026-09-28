@@ -234,6 +234,10 @@ export default function Pipeline() {
   const [newPipelineName, setNewPipelineName] = useState('')
   const [newPipelineDept, setNewPipelineDept] = useState('')
   const [pipelineLoading, setPipelineLoading] = useState(false)
+  const [editPipelineDialog, setEditPipelineDialog] = useState(false)
+  const [editPipelineName, setEditPipelineName] = useState('')
+  const [editPipelineDept, setEditPipelineDept] = useState('')
+  const [editPipelineLoading, setEditPipelineLoading] = useState(false)
 
   useEffect(() => {
     if (!tenant?.id) return
@@ -264,6 +268,31 @@ export default function Pipeline() {
       setPipelineDialog(false)
       setNewPipelineName('')
       setNewPipelineDept('')
+    }
+  }
+
+  const openEditPipeline = () => {
+    const pl = pipelines.find(p => p.id === selectedPipelineId)
+    if (!pl) return
+    setEditPipelineName(pl.name)
+    setEditPipelineDept(pl.department || '')
+    setEditPipelineDialog(true)
+  }
+
+  const handleEditPipeline = async () => {
+    if (!editPipelineName.trim() || !selectedPipelineId) return
+    setEditPipelineLoading(true)
+    try {
+      const updated = await client.updatePipeline(selectedPipelineId, {
+        name: editPipelineName.trim(),
+        department: editPipelineDept.trim(),
+      })
+      setPipelines(prev => prev.map(p => p.id === selectedPipelineId ? { ...p, ...updated } : p))
+      setEditPipelineDialog(false)
+    } catch {
+      // handled silently
+    } finally {
+      setEditPipelineLoading(false)
     }
   }
 
@@ -418,13 +447,22 @@ export default function Pipeline() {
                 </SelectContent>
               </Select>
               {selectedPipelineId && (
-                <button
-                  onClick={() => handleDeletePipeline(selectedPipelineId)}
-                  className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  title="Delete pipeline"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <>
+                  <button
+                    onClick={openEditPipeline}
+                    className="p-1.5 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    title="Edit pipeline name"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeletePipeline(selectedPipelineId)}
+                    className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    title="Delete pipeline"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -535,6 +573,41 @@ export default function Pipeline() {
             <Button variant="outline" onClick={() => setPipelineDialog(false)}>Cancel</Button>
             <Button onClick={handleCreatePipeline} disabled={!newPipelineName.trim() || pipelineLoading}>
               {pipelineLoading ? 'Creating…' : 'Create Pipeline'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Pipeline Dialog */}
+      <Dialog open={editPipelineDialog} onOpenChange={(o) => !o && setEditPipelineDialog(false)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Pipeline</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Pipeline Name *</Label>
+              <Input
+                value={editPipelineName}
+                onChange={(e) => setEditPipelineName(e.target.value)}
+                placeholder="e.g. Sales, HR, Support"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleEditPipeline()}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Department <span className="text-xs text-gray-400">(optional)</span></Label>
+              <Input
+                value={editPipelineDept}
+                onChange={(e) => setEditPipelineDept(e.target.value)}
+                placeholder="e.g. Sales Team"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPipelineDialog(false)}>Cancel</Button>
+            <Button onClick={handleEditPipeline} disabled={!editPipelineName.trim() || editPipelineLoading}>
+              {editPipelineLoading ? 'Saving…' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

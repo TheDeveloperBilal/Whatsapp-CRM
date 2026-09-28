@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { ArrowLeft, Bot, CheckCheck, Check, Clock, Send, UserRound, Image as ImageIcon, AlertCircle, Mic, FileText, Video, Play, Pause, Tag, X, Plus } from 'lucide-react'
+import { ArrowLeft, Bot, CheckCheck, Check, Clock, Send, UserRound, Image as ImageIcon, AlertCircle, Mic, FileText, Video, Play, Pause, Tag, X, Plus, UserCheck } from 'lucide-react'
 import { PortalClient, DEFAULT_BACKEND_URL } from '@/lib/backend'
 import { loadProfile } from '@/lib/gateway'
 
@@ -150,6 +150,8 @@ export default function Inbox() {
     contacts,
     tenant,
     tags,
+    agents,
+    currentUser,
     messagesFor,
     ensureMessages,
     sendMessage,
@@ -159,6 +161,8 @@ export default function Inbox() {
     markRead,
     saveContactNote,
   } = usePortal()
+
+  const isAgent = currentUser?.role === 'agent'
 
   const [activeId, setActiveId] = useState<string | undefined>(undefined)
   const [filter, setFilter] = useState('all')
@@ -188,8 +192,13 @@ export default function Inbox() {
   }, [msgs.length])
 
   const pendingCount = conversations.filter((c) => c.status === 'pending').length
-  const filtered = conversations.filter((c) => (filter === 'all' ? true : c.status === filter))
+  // Agents only see their assigned chats; owners/admins see all
+  const agentConversations = isAgent
+    ? conversations.filter((c) => c.assigneeId === currentUser?.userId)
+    : conversations
+  const filtered = agentConversations.filter((c) => (filter === 'all' ? true : c.status === filter))
   const contactOf = (c: Conversation) => contacts.find((x) => x.id === c.contactId)
+  const agentOf = (assigneeId?: string) => agents.find(a => a.id === assigneeId)
 
   const selectConversation = (id: string) => {
     setActiveId(id)
@@ -273,6 +282,14 @@ export default function Inbox() {
                         <Badge className="ml-auto shrink-0 h-5 px-1.5">{c.unread}</Badge>
                       )}
                     </div>
+                    {c.assigneeId && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 font-medium">
+                          <UserCheck className="size-2.5" />
+                          {agentOf(c.assigneeId)?.name || agentOf(c.assigneeId)?.username || 'Assigned'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </button>

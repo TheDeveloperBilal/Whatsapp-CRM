@@ -484,7 +484,7 @@ export class PortalClient {
   }
 
   // ── Contacts: bulk CSV import ──
-  importContacts(tenantId: string, contacts: { name?: string; phone: string; notes?: string }[]) {
+  importContacts(tenantId: string, contacts: { name?: string; phone: string; notes?: string; tags?: string }[]) {
     return this.req<{ created: number; skipped: number }>(`/tenants/${tenantId}/contacts/import`, {
       method: 'POST',
       body: JSON.stringify({ contacts }),

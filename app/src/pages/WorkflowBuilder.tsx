@@ -63,19 +63,26 @@ const STEP_META: Record<WfStepType, StepMeta> = {
   dnd_toggle:  { label: 'Enable/Disable DND',icon: BellOff,      color: '#6b7280', bg: '#f3f4f6', desc: 'Toggle Do Not Disturb mode' },
 }
 
-const TRIGGER_OPTIONS = [
-  { value: 'contact.created',        label: 'Contact Created' },
-  { value: 'tag.added',              label: 'Tag Added' },
-  { value: 'tag.removed',            label: 'Tag Removed' },
-  { value: 'message.received',       label: 'Message Received' },
-  { value: 'message.first',          label: 'First Message' },
-  { value: 'conversation.resolved',  label: 'Conversation Resolved' },
-  { value: 'conversation.opened',    label: 'Conversation Opened' },
-  { value: 'appointment.booked',     label: 'Appointment Booked' },
-  { value: 'payment.received',       label: 'Payment Received' },
-  { value: 'deal.stage_changed',     label: 'Deal Stage Changed' },
-  { value: 'form.submitted',         label: 'Form Submitted' },
-  { value: 'manual',                 label: 'Manual Trigger' },
+interface TriggerOption {
+  value: string
+  label: string
+  desc: string
+  group: string
+}
+
+const TRIGGER_OPTIONS: TriggerOption[] = [
+  { value: 'contact.created',       label: 'Contact Created',        desc: 'Fires when a new contact is created or captured', group: 'Contacts' },
+  { value: 'tag.added',             label: 'Tag Added',              desc: 'Fires when a specific tag is added to a contact', group: 'Contacts' },
+  { value: 'tag.removed',           label: 'Tag Removed',            desc: 'Fires when a specific tag is removed from a contact', group: 'Contacts' },
+  { value: 'message.received',      label: 'Inbound Message',        desc: 'Fires on every inbound WhatsApp message received', group: 'Conversations' },
+  { value: 'message.first',         label: 'First Message',          desc: 'Fires only on the very first message from a contact', group: 'Conversations' },
+  { value: 'conversation.resolved', label: 'Conversation Resolved',  desc: 'Fires when an agent marks a conversation as resolved', group: 'Conversations' },
+  { value: 'conversation.opened',   label: 'Conversation Opened',    desc: 'Fires when a resolved conversation is re-opened', group: 'Conversations' },
+  { value: 'appointment.booked',    label: 'Appointment Booked',     desc: 'Fires when a contact books an appointment', group: 'Commerce' },
+  { value: 'payment.received',      label: 'Payment Received',       desc: 'Fires when a payment is confirmed via a payment link', group: 'Commerce' },
+  { value: 'deal.stage_changed',    label: 'Deal Stage Changed',     desc: 'Fires when a deal is moved to a different pipeline stage', group: 'Pipeline' },
+  { value: 'form.submitted',        label: 'Form Submitted',         desc: 'Fires when a contact submits a web form', group: 'Other' },
+  { value: 'manual',                label: 'Manual / API Trigger',   desc: 'Triggered manually from the workflow page or via API', group: 'Other' },
 ]
 
 // ── Step tree helpers ─────────────────────────────────────────────────────────
@@ -403,7 +410,7 @@ function findStepById(steps: WfStep[], id: string): WfStep | null {
 }
 
 function StepConfigPanel({
-  step, allSteps, onClose, onSave, onDelete, onNavigate,
+  step, allSteps, onClose, onSave, onDelete, onNavigate, agents, tags,
 }: {
   step: WfStep
   allSteps: WfStep[]
@@ -411,6 +418,8 @@ function StepConfigPanel({
   onSave: (id: string, patch: Partial<WfStep>) => void
   onDelete: (id: string) => void
   onNavigate: (dir: 'up' | 'down') => void
+  agents: { id: string; username: string; name: string; role: string }[]
+  tags: { id: string; label: string; color: string }[]
 }) {
   const m = STEP_META[step.type]
   const Icon = m.icon
@@ -599,8 +608,24 @@ function StepConfigPanel({
         {/* ── Tag config ── */}
         {(step.type === 'tag_add' || step.type === 'tag_remove') && (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Tag name</Label>
-            <Input value={config.tagName || ''} onChange={e => set('tagName', e.target.value)} placeholder="e.g. VIP" />
+            <Label className="text-xs font-medium">Tag</Label>
+            {tags.length > 0 ? (
+              <Select value={config.tagName || ''} onValueChange={v => set('tagName', v)}>
+                <SelectTrigger><SelectValue placeholder="Select tag…" /></SelectTrigger>
+                <SelectContent>
+                  {tags.map(t => (
+                    <SelectItem key={t.id} value={t.label}>
+                      <span className="flex items-center gap-2">
+                        <span className="size-2 rounded-full inline-block" style={{ background: t.color }} />
+                        {t.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input value={config.tagName || ''} onChange={e => set('tagName', e.target.value)} placeholder="e.g. VIP" />
+            )}
           </div>
         )}
 
@@ -623,8 +648,35 @@ function StepConfigPanel({
         {/* ── Assign To ── */}
         {step.type === 'assign_to' && (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Agent username</Label>
-            <Input value={config.agentUsername || ''} onChange={e => set('agentUsername', e.target.value)} placeholder="e.g. support_agent" />
+            <Label className="text-xs font-medium">Assign to agent</Label>
+            {agents.length > 0 ? (
+              <Select
+                value={config.agentId || ''}
+                onValueChange={v => {
+                  const a = agents.find(x => x.id === v)
+                  set('agentId', v)
+                  set('agentUsername', a?.username || '')
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select agent…" /></SelectTrigger>
+                <SelectContent>
+                  {agents.map(a => (
+                    <SelectItem key={a.id} value={a.id}>
+                      <div>
+                        <span className="font-medium">{a.name || a.username}</span>
+                        <span className="ml-1 text-[10px] text-muted-foreground">@{a.username}</span>
+                        <span className="ml-1 text-[10px] text-muted-foreground capitalize">· {a.role}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input value={config.agentUsername || ''} onChange={e => set('agentUsername', e.target.value)} placeholder="e.g. support_agent" />
+            )}
+            {config.agentId && (
+              <p className="text-[10px] text-muted-foreground">@{config.agentUsername}</p>
+            )}
           </div>
         )}
 
@@ -668,14 +720,18 @@ function StepConfigPanel({
 }
 
 // ── Trigger Config Panel ──────────────────────────────────────────────────────
-function TriggerConfigPanel({ trigger, onClose, onSave }: {
+function TriggerConfigPanel({ trigger, onClose, onSave, tags }: {
   trigger: WfTrigger
   onClose: () => void
   onSave: (t: WfTrigger) => void
+  tags: { id: string; label: string; color: string }[]
 }) {
   const [type, setType] = useState(trigger.type)
   const [config, setConfig] = useState({ ...trigger.config })
   const set = (k: string, v: any) => setConfig(p => ({ ...p, [k]: v }))
+
+  const selectedOption = TRIGGER_OPTIONS.find(o => o.value === type)
+  const groups = [...new Set(TRIGGER_OPTIONS.map(o => o.group))]
 
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full overflow-hidden shadow-lg">
@@ -691,29 +747,68 @@ function TriggerConfigPanel({ trigger, onClose, onSave }: {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
         <div className="space-y-1.5">
           <Label className="text-xs font-medium">Trigger event</Label>
-          <Select value={type} onValueChange={setType}>
+          <Select value={type} onValueChange={v => { setType(v); setConfig({}) }}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {TRIGGER_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            <SelectContent className="max-h-72">
+              {groups.map(group => (
+                <Fragment key={group}>
+                  <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{group}</div>
+                  {TRIGGER_OPTIONS.filter(o => o.group === group).map(o => (
+                    <SelectItem key={o.value} value={o.value} className="pl-4">
+                      <div>
+                        <div className="font-medium">{o.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{o.desc}</div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </Fragment>
+              ))}
             </SelectContent>
           </Select>
+          {selectedOption && (
+            <p className="text-[11px] text-muted-foreground bg-muted/40 rounded px-2 py-1.5">{selectedOption.desc}</p>
+          )}
         </div>
+
         {(type === 'tag.added' || type === 'tag.removed') && (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Tag name (leave blank for any)</Label>
-            <Input value={config.tag || ''} onChange={e => set('tag', e.target.value)} placeholder="e.g. VIP" />
+            <Label className="text-xs font-medium">Tag (leave blank for any tag)</Label>
+            <Select value={config.tag || '_any'} onValueChange={v => set('tag', v === '_any' ? '' : v)}>
+              <SelectTrigger><SelectValue placeholder="Any tag" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_any">— Any tag —</SelectItem>
+                {tags.map(t => (
+                  <SelectItem key={t.id} value={t.label}>
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 rounded-full inline-block" style={{ background: t.color }} />
+                      {t.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
+
         {type === 'message.received' && (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Keyword filter (optional)</Label>
-            <Input value={config.keyword || ''} onChange={e => set('keyword', e.target.value)} placeholder="e.g. hello" />
+            <Label className="text-xs font-medium">Keyword filter (optional — leave blank for every message)</Label>
+            <Input value={config.keyword || ''} onChange={e => set('keyword', e.target.value)} placeholder="e.g. help, support" />
+            <p className="text-[10px] text-muted-foreground">Workflow fires only when the inbound message contains this word.</p>
           </div>
         )}
+
         {type === 'deal.stage_changed' && (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Pipeline stage name</Label>
+            <Label className="text-xs font-medium">Pipeline stage name (optional)</Label>
             <Input value={config.stage || ''} onChange={e => set('stage', e.target.value)} placeholder="e.g. Won" />
+          </div>
+        )}
+
+        {type === 'payment.received' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Minimum amount (optional)</Label>
+            <Input type="number" value={config.minAmount || ''} onChange={e => set('minAmount', e.target.value)} placeholder="e.g. 100" />
           </div>
         )}
       </div>
@@ -782,7 +877,7 @@ const client = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
 export default function WorkflowBuilder() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { tenant } = usePortal()
+  const { tenant, agents, tags } = usePortal()
 
   const [name, setName] = useState('Untitled Workflow')
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
@@ -1137,6 +1232,7 @@ export default function WorkflowBuilder() {
             trigger={trigger}
             onClose={() => setShowTriggerConfig(false)}
             onSave={setTrigger}
+            tags={tags}
           />
         )}
         {activeTab === 'builder' && selectedStep && !showVersions && (
@@ -1147,6 +1243,8 @@ export default function WorkflowBuilder() {
             onSave={handleUpdateStep}
             onDelete={id => { handleDeleteStep(id); setSelectedId(null) }}
             onNavigate={handleNavigate}
+            agents={agents}
+            tags={tags}
           />
         )}
         {showVersions && (

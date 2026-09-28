@@ -17,6 +17,7 @@ import { buildApi } from './api.js'
 import { runAutomations } from './automations.js'
 import { runIntentRouting } from './intents.js'
 import { verifyToken } from './auth.js'
+import { initWorkflowEngine, fireTrigger } from './workflow-engine.js'
 
 const PORT = process.env.PORT || process.env.PORTAL_PORT || 8787
 
@@ -86,6 +87,9 @@ function broadcast(event) {
 }
 
 app.use('/api', buildApi(broadcast))
+
+// Wire sendText + broadcast into the workflow engine so V2 steps can send messages
+initWorkflowEngine({ sendText, broadcast })
 
 // In production, Express serves the built React app as static files.
 // Run `npm run build` first, then `npm start`.
@@ -173,11 +177,12 @@ function conversationFor(session, jid, pushName) {
     }
     upsert('contacts', contact)
     broadcast({ type: 'contact', contact })
-    // fire contact.created automation for new contacts
+    // fire contact.created automation + new workflow engine for new contacts
     const session = collection('sessions').find((s) => s.tenantId === tenantId)
     runAutomations('contact.created', { conv: null, contact, session, message: null }, broadcast).catch(
       (err) => console.error('[automation contact.created]:', err.message),
     )
+    fireTrigger(tenantId, 'contact.created', { contactId: contact.id })
   } else if (pushName && contact.name !== pushName && contact.name.startsWith('+')) {
     contact.name = pushName
     upsert('contacts', contact)
@@ -309,12 +314,36 @@ waEvents.on('message', async (e) => {
   save()
   broadcast({ type: 'message', message: msg, conversation: conv, contact })
 
+  // ── Auto-tag contact based on message keywords matching tag labels ──────────
+  if (!e.fromMe && e.text) {
+    const bodyLower = e.text.toLowerCase()
+    const allTags = collection('tags') || []
+    let tagged = false
+    for (const tag of allTags) {
+      const keyword = (tag.label || '').toLowerCase()
+      if (keyword && bodyLower.includes(keyword)) {
+        if (!contact.tags) contact.tags = []
+        if (!contact.tags.includes(tag.id)) {
+          contact.tags.push(tag.id)
+          tagged = true
+        }
+      }
+    }
+    if (tagged) {
+      upsert('contacts', contact)
+      save()
+      broadcast({ type: 'contact', contact })
+    }
+  }
+
   // ── Automation engine (message.received + message.first) + Intent routing ──
   if (!e.fromMe) {
     const ctx = { conv, contact, session, message: msg }
+    const wfCtx = { contactId: contact.id, conversationId: conv.id, messageBody: e.text }
     runAutomations('message.received', ctx, broadcast).catch(
       (err) => console.error('[automation message.received]:', err.message),
     )
+    fireTrigger(session.tenantId, 'message.received', wfCtx)
     const msgCount = collection('messages').filter(
       (m) => m.conversationId === conv.id && !m.fromMe,
     ).length
@@ -322,6 +351,7 @@ waEvents.on('message', async (e) => {
       runAutomations('message.first', ctx, broadcast).catch(
         (err) => console.error('[automation message.first]:', err.message),
       )
+      fireTrigger(session.tenantId, 'message.first', wfCtx)
       // Auto-assign on first message if no assignee yet
       autoAssign(session.tenantId, conv, e.text)
     }

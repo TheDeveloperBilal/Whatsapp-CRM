@@ -523,12 +523,22 @@ export function buildApi(broadcast) {
       if (!phone) { skipped.push(row); continue }
       const existing = collection('contacts').find((c) => c.tenantId === req.params.tid && c.phone === phone)
       if (existing) { skipped.push(row); continue }
+      // Resolve tags: accept comma-separated label names (e.g. "VIP, Billing")
+      const rawTags = String(row.tags || '').trim()
+      const allTags = collection('tags') || []
+      const tenantTags = allTags.filter(t => !t.tenantId || t.tenantId === req.params.tid)
+      const resolvedTagIds = rawTags
+        ? rawTags.split(',').map(s => s.trim()).filter(Boolean).flatMap(label => {
+            const t = tenantTags.find(x => x.label.toLowerCase() === label.toLowerCase())
+            return t ? [t.id] : []
+          })
+        : []
       const contact = {
         id: uid('c'), tenantId: req.params.tid,
         name: String(row.name || phone).trim(),
         phone,
         notes: String(row.notes || '').trim(),
-        tags: [],
+        tags: resolvedTagIds,
         avatarHue: Math.floor(Math.random() * 360),
         createdAt: new Date().toISOString(),
       }

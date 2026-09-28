@@ -36,7 +36,7 @@ import type { Contact } from '@/types/portal'
 
 const contactsClient = new PortalClient(loadProfile().baseUrl || DEFAULT_BACKEND_URL)
 
-interface CsvRow { name: string; phone: string; notes: string }
+interface CsvRow { name: string; phone: string; notes: string; tags: string }
 
 function parseCsv(text: string): CsvRow[] {
   const lines = text.trim().split(/\r?\n/)
@@ -45,6 +45,7 @@ function parseCsv(text: string): CsvRow[] {
   const nameIdx = header.indexOf('name')
   const phoneIdx = header.findIndex((h) => h === 'phone' || h === 'number' || h === 'mobile')
   const notesIdx = header.indexOf('notes')
+  const tagsIdx = header.indexOf('tags')
   if (phoneIdx === -1) return []
   return lines.slice(1).map((line) => {
     const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
@@ -52,6 +53,7 @@ function parseCsv(text: string): CsvRow[] {
       name: nameIdx >= 0 ? cols[nameIdx] ?? '' : '',
       phone: cols[phoneIdx] ?? '',
       notes: notesIdx >= 0 ? cols[notesIdx] ?? '' : '',
+      tags: tagsIdx >= 0 ? cols[tagsIdx] ?? '' : '',
     }
   }).filter((r) => r.phone)
 }
@@ -226,7 +228,7 @@ export default function Contacts() {
             <>
               <div className="space-y-3 py-2">
                 <p className="text-sm text-muted-foreground">
-                  CSV must have a <code className="bg-muted px-1 rounded text-xs">phone</code> column. Optional: <code className="bg-muted px-1 rounded text-xs">name</code>, <code className="bg-muted px-1 rounded text-xs">notes</code>.
+                  CSV must have a <code className="bg-muted px-1 rounded text-xs">phone</code> column. Optional: <code className="bg-muted px-1 rounded text-xs">name</code>, <code className="bg-muted px-1 rounded text-xs">notes</code>, <code className="bg-muted px-1 rounded text-xs">tags</code> (comma-separated label names).
                 </p>
                 {csvRows.length > 0 ? (
                   <div className="rounded-md border overflow-hidden">
@@ -237,6 +239,7 @@ export default function Contacts() {
                             <TableHead>Name</TableHead>
                             <TableHead>Phone</TableHead>
                             <TableHead>Notes</TableHead>
+                            <TableHead>Tags</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -245,6 +248,7 @@ export default function Contacts() {
                               <TableCell className="text-sm">{r.name || '—'}</TableCell>
                               <TableCell className="text-sm">{r.phone}</TableCell>
                               <TableCell className="text-sm text-muted-foreground">{r.notes || '—'}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{r.tags || '—'}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
