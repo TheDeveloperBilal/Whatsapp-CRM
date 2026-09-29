@@ -1399,6 +1399,16 @@ export function buildApi(broadcast) {
     res.json({ ok: true, message: 'Workflow triggered' })
   })
 
+  // Temporary DB export for migration — protected by owner JWT check
+  r.get('/admin/export-db', (req, res) => {
+    if (req.user?.role !== 'owner' && req.user?.role !== 'admin') return res.status(403).json({ error: 'forbidden' })
+    const dbFile = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'data', 'db.json')
+    if (!fs.existsSync(dbFile)) return res.status(404).json({ error: 'db not found' })
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', 'attachment; filename=db.json')
+    res.send(fs.readFileSync(dbFile))
+  })
+
   return r
 }
 
