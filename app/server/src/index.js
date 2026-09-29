@@ -422,6 +422,6 @@ waEvents.on('history', ({ sessionId, contacts }) => {
 server.listen(PORT, () => {
   const ai = aiStatus()
   console.log(`[portal-backend] http://localhost:${PORT}  (ws: /ws)`)
-  console.log(`[portal-backend] AI: ${ai.configured ? `enabled (${ai.model} via ${ai.baseUrl})` : 'NOT configured — set AI_API_KEY in app/.env'}`)
+  console.log(`[portal-backend] AI: ${ai.configured ? `enabled — primary: ${ai.primary ?? 'none'}, fallback: ${ai.fallback ?? 'none'}` : 'NOT configured — set AI_API_KEY in app/.env'}`)
   resumeSessions()
 })
