@@ -166,7 +166,7 @@ export async function runAutomations(trigger, ctx, broadcast) {
   const { conv, contact } = ctx
   const tenantId = conv?.tenantId ?? contact?.tenantId
   if (!tenantId) return
-  const rules = collection('automations').filter(
+  const rules = (collection('automations') ?? []).filter(
     (a) => a.tenantId === tenantId && a.enabled && a.trigger === trigger,
   )
   if (!rules.length) return
