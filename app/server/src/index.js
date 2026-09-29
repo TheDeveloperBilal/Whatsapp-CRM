@@ -190,7 +190,7 @@ function conversationFor(session, jid, pushName) {
   }
 
   let conv = collection('conversations').find(
-    (c) => c.tenantId === tenantId && c.sessionId === session.id && c.contactId === contact.id,
+    (c) => c.tenantId === tenantId && c.sessionId === session.id && c.contactId === contact.id && c.status !== 'resolved',
   )
   if (!conv) {
     conv = {
@@ -290,7 +290,7 @@ waEvents.on('message', async (e) => {
   const existing = collection('messages').find((m) => m.id === e.id)
   if (existing) return
 
-  const { contact, conv } = conversationFor(session, e.jid, e.pushName)
+  const { contact, conv } = conversationFor(session, e.jid, e.fromMe ? null : e.pushName)
   // Store the JID on conv so fireBotForConversation can reach it
   conv._jid = e.jid
 
