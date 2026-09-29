@@ -1,0 +1,23 @@
+name: Deploy to Oracle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/server/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Oracle via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 139.185.35.250
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd ~/portal
+            git pull origin main
+            pm2 restart portal-backend
+            echo "Deploy complete"
