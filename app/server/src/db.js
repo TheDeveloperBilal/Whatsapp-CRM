@@ -141,6 +141,25 @@ if (!db.invoices)         { db.invoices         = []; fs.writeFileSync(DB_FILE, 
 if (!db.workflows)        { db.workflows        = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)) }
 if (!db.workflowRuns)     { db.workflowRuns     = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)) }
 if (!db.pipelines)        { db.pipelines        = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); console.log('[db] Migrated: added pipelines collection') }
+if (!db.automations)      { db.automations      = []; fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)) }
+
+// Deduplicate open conversations: keep only the most-recently-updated one per contact.
+// Extra duplicates accumulate when WhatsApp sessions reconnect with a new session ID.
+{
+  const newest = {}
+  for (const c of (db.conversations || [])) {
+    if (c.status === 'resolved') continue
+    const key = `${c.tenantId}:${c.contactId}`
+    if (!newest[key] || new Date(c.updatedAt) > new Date(newest[key].updatedAt)) newest[key] = c
+  }
+  let deduped = false
+  for (const c of (db.conversations || [])) {
+    if (c.status === 'resolved') continue
+    const key = `${c.tenantId}:${c.contactId}`
+    if (newest[key] && newest[key].id !== c.id) { c.status = 'resolved'; deduped = true }
+  }
+  if (deduped) { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); console.log('[db] Migrated: collapsed duplicate open conversations') }
+}
 
 // Migrate existing tenants: add businessType if missing
 if (db.tenants) {

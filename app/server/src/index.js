@@ -189,8 +189,10 @@ function conversationFor(session, jid, pushName) {
     broadcast({ type: 'contact', contact })
   }
 
+  // sessionId intentionally excluded: WhatsApp reconnects change session IDs and
+  // would create duplicate conversations for the same contact otherwise.
   let conv = collection('conversations').find(
-    (c) => c.tenantId === tenantId && c.sessionId === session.id && c.contactId === contact.id && c.status !== 'resolved',
+    (c) => c.tenantId === tenantId && c.contactId === contact.id && c.status !== 'resolved',
   )
   if (!conv) {
     conv = {
@@ -199,10 +201,13 @@ function conversationFor(session, jid, pushName) {
       sessionId: session.id,
       contactId: contact.id,
       status: 'open',
-      botEnabled: true, // AI armed by default on new chats
+      botEnabled: true,
       unread: 0,
       updatedAt: new Date().toISOString(),
     }
+    upsert('conversations', conv)
+  } else if (conv.sessionId !== session.id) {
+    conv.sessionId = session.id
     upsert('conversations', conv)
   }
   return { contact, conv }
