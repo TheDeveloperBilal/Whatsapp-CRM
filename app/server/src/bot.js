@@ -235,6 +235,10 @@ async function callLLM(cfg, history, inboundText) {
     }
   }
 
+  if (NVIDIA_KEY) {
+    return callOpenRouter(NVIDIA_KEY, NVIDIA_BASE, NVIDIA_MODEL, messages)
+  }
+
   return null
 }
 
