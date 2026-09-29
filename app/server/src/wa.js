@@ -195,7 +195,7 @@ export async function sendText(sessionId, jid, text) {
 
 // reconnect sessions that were linked before a server restart
 export async function resumeSessions() {
-  for (const s of collection('sessions')) {
+  for (const s of (collection('sessions') ?? [])) {
     if (fs.existsSync(path.join(AUTH_DIR, s.id, 'creds.json'))) {
       startSession(s.id).catch((e) => console.error(`resume ${s.id}:`, e.message))
     }
