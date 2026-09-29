@@ -28,7 +28,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 // Fallback: Nvidia via OpenRouter
 const NVIDIA_KEY   = process.env.AI_API_KEY || ''
 const NVIDIA_BASE  = (process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '')
-const NVIDIA_MODEL = process.env.AI_MODEL || 'llama3-70b-8192'
+const NVIDIA_MODEL = process.env.AI_MODEL || 'llama-3.1-8b-instant'
 
 const hasAny = !!(GEMINI_KEY || NVIDIA_KEY)
 
