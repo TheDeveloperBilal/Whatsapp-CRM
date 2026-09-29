@@ -1399,14 +1399,40 @@ export function buildApi(broadcast) {
     res.json({ ok: true, message: 'Workflow triggered' })
   })
 
-  // Temporary DB export for migration — protected by owner JWT check
+  // Temporary DB export for migration — uses in-memory collections
   r.get('/admin/export-db', (req, res) => {
     if (req.user?.role !== 'owner' && req.user?.role !== 'admin') return res.status(403).json({ error: 'forbidden' })
-    const dbFile = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'data', 'db.json')
-    if (!fs.existsSync(dbFile)) return res.status(404).json({ error: 'db not found' })
+    const snapshot = {
+      users: collection('users'),
+      tenants: collection('tenants'),
+      tags: collection('tags'),
+      contacts: collection('contacts'),
+      conversations: collection('conversations'),
+      messages: collection('messages'),
+      sessions: collection('sessions'),
+      botRules: collection('botRules'),
+      botConfigs: collection('botConfigs'),
+      cannedResponses: collection('cannedResponses'),
+      knowledgeBase: collection('knowledgeBase'),
+      products: collection('products'),
+      campaigns: collection('campaigns'),
+      intents: collection('intents'),
+      deals: collection('deals'),
+      pipelineStages: collection('pipelineStages'),
+      pipelines: collection('pipelines'),
+      appointmentTypes: collection('appointmentTypes'),
+      appointments: collection('appointments'),
+      paymentGateways: collection('paymentGateways'),
+      paymentLinks: collection('paymentLinks'),
+      invoices: collection('invoices'),
+      workflows: collection('workflows'),
+      workflowRuns: collection('workflowRuns'),
+      notifications: collection('notifications'),
+      departments: collection('departments'),
+    }
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Content-Disposition', 'attachment; filename=db.json')
-    res.send(fs.readFileSync(dbFile))
+    res.json(snapshot)
   })
 
   return r
