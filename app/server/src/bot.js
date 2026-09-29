@@ -131,12 +131,13 @@ async function callLLM(cfg, history, inboundText) {
   // Build conversation context for the system prompt
   let systemContent = cfg.persona
 
-  // Inject knowledge base articles so the AI can answer factual questions
+  // Inject knowledge base articles — capped at 3000 chars to stay within token limits
   const kbArticles = collection('knowledgeBase').filter((a) => a.tenantId === cfg.tenantId)
   if (kbArticles.length > 0) {
-    const kbBlock = kbArticles
+    let kbBlock = kbArticles
       .map((a) => `### ${a.title}\n${a.body || a.content || ''}`)
       .join('\n\n')
+    if (kbBlock.length > 3000) kbBlock = kbBlock.slice(0, 3000) + '\n...[truncated]'
     systemContent += `\n\n--- KNOWLEDGE BASE ---\nUse the information below to answer customer questions accurately. Do not invent facts not present here.\n\n${kbBlock}\n--- END KNOWLEDGE BASE ---`
   }
 
@@ -177,7 +178,9 @@ async function callLLM(cfg, history, inboundText) {
     if (grouped.physical) sections.push(`[Physical Products]\n${grouped.physical.map(fmt).join('\n\n')}`)
     if (grouped.digital) sections.push(`[Digital Products]\n${grouped.digital.map(fmt).join('\n\n')}`)
     if (grouped.service) sections.push(`[Services]\n${grouped.service.map(fmt).join('\n\n')}`)
-    systemContent += `\n\n--- PRODUCT CATALOG ---\nUse ONLY this data to answer product questions. Never invent products, prices, or stock levels not listed here. If a product is OUT OF STOCK, clearly say so.\n\n${sections.join('\n\n')}\n--- END PRODUCT CATALOG ---`
+    let catalog = sections.join('\n\n')
+    if (catalog.length > 2000) catalog = catalog.slice(0, 2000) + '\n...[truncated]'
+    systemContent += `\n\n--- PRODUCT CATALOG ---\nUse ONLY this data to answer product questions. Never invent products, prices, or stock levels not listed here. If a product is OUT OF STOCK, clearly say so.\n\n${catalog}\n--- END PRODUCT CATALOG ---`
   }
   if (history.length > 0) {
     const first = new Date(history[0].timestamp)
