@@ -88,18 +88,34 @@ async function callGemini(messages) {
   }
   if (system) body.systemInstruction = { parts: [{ text: system.content }] }
 
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 25_000)
+  const attempt = async () => {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 25_000)
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`,
+        { method: 'POST', signal: ctrl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      )
+      if (res.status === 503 || res.status === 429) {
+        const err = new Error(`Gemini ${res.status}`)
+        err.retryable = true
+        throw err
+      }
+      if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`)
+      const data = await res.json()
+      return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null
+    } finally {
+      clearTimeout(t)
+    }
+  }
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`,
-      { method: 'POST', signal: ctrl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    )
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const data = await res.json()
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null
-  } finally {
-    clearTimeout(t)
+    return await attempt()
+  } catch (e) {
+    if (e.retryable) {
+      await new Promise(r => setTimeout(r, 2000))
+      return await attempt()
+    }
+    throw e
   }
 }
 
@@ -217,10 +233,6 @@ async function callLLM(cfg, history, inboundText) {
     } catch (e) {
       console.warn(`[AI] Gemini failed (${e.message}) — trying Nvidia fallback...`)
     }
-  }
-
-  if (NVIDIA_KEY) {
-    return callOpenRouter(NVIDIA_KEY, NVIDIA_BASE, cfg.model || NVIDIA_MODEL, messages)
   }
 
   return null
