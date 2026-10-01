@@ -14,7 +14,12 @@ const STORAGE_KEY = 'waportal.gateway'
 export function loadProfile(): GatewayProfile {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as GatewayProfile
+    if (raw) {
+      const p = JSON.parse(raw) as GatewayProfile
+      // In production, never use a stale localhost URL saved from a dev session
+      const isStaleLocalhost = import.meta.env.PROD && (!p.baseUrl || p.baseUrl.includes('localhost'))
+      if (!isStaleLocalhost) return p
+    }
   } catch {
     /* fall through */
   }
