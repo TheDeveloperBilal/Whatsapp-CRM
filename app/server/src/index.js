@@ -221,9 +221,12 @@ const BOT_DEBOUNCE_MS = 3000
 const botDebounceTimers = new Map() // convId → timer
 const botAiFailCounts = new Map()  // convId → consecutive AI-failure count
 const BOT_HANDOFF_THRESHOLD = 3   // disable bot only after this many consecutive AI failures
+const botRunning = new Set()       // convIds currently being processed — prevents concurrent double-sends
 
 async function fireBotForConversation(conv, session, contact) {
   if (!conv.botEnabled) return
+  if (botRunning.has(conv.id)) return // LLM still running for this conv; skip to avoid double-send
+  botRunning.add(conv.id)
   try {
     const history = collection('messages')
       .filter((m) => m.conversationId === conv.id)
@@ -297,6 +300,8 @@ async function fireBotForConversation(conv, session, contact) {
     }
   } catch (err) {
     console.error('bot pipeline:', err.message)
+  } finally {
+    botRunning.delete(conv.id)
   }
 }
 

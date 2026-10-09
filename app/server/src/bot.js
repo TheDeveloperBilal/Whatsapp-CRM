@@ -87,7 +87,7 @@ async function callGemini(messages) {
   }))
   const body = {
     contents,
-    generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 800 },
   }
   if (system) body.systemInstruction = { parts: [{ text: system.content }] }
 
@@ -136,7 +136,7 @@ async function callOpenRouter(apiKey, baseUrl, model, messages) {
         'HTTP-Referer': 'http://localhost:3000',
         'X-Title': 'WhatsApp Portal',
       },
-      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 400 }),
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 800 }),
     })
     if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const data = await res.json()
