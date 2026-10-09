@@ -283,8 +283,8 @@ export async function botReply(tenantId, conversation, history, inboundText) {
       console.error('[AI] All models failed:', e.message)
     }
     if (aiResult) return aiResult
-    // AI produced nothing — honour the configured fallback so the customer isn't left on read
-    if (cfg.fallback === 'human') return { handoff: true, message: cfg.fallbackMessage }
+    // AI produced nothing — signal a transient failure; caller tracks consecutive count
+    if (cfg.fallback === 'human') return { handoff: true, aiFailure: true, message: cfg.fallbackMessage }
     if (cfg.fallback === 'message') return cfg.fallbackMessage
     return null
   }

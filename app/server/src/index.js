@@ -219,6 +219,8 @@ function conversationFor(session, jid, pushName) {
 // to everything at once rather than firing once per message.
 const BOT_DEBOUNCE_MS = 3000
 const botDebounceTimers = new Map() // convId → timer
+const botAiFailCounts = new Map()  // convId → consecutive AI-failure count
+const BOT_HANDOFF_THRESHOLD = 3   // disable bot only after this many consecutive AI failures
 
 async function fireBotForConversation(conv, session, contact) {
   if (!conv.botEnabled) return
@@ -244,6 +246,15 @@ async function fireBotForConversation(conv, session, contact) {
     }
 
     if (result && typeof result === 'object' && result.handoff) {
+      if (result.aiFailure) {
+        // Transient AI failure — increment counter, only fire handoff after threshold
+        const fails = (botAiFailCounts.get(conv.id) || 0) + 1
+        botAiFailCounts.set(conv.id, fails)
+        console.warn(`[bot] AI failure #${fails}/${BOT_HANDOFF_THRESHOLD} for conv ${conv.id}`)
+        if (fails < BOT_HANDOFF_THRESHOLD) return // stay silent, keep bot active
+        // Threshold reached — fall through to fire the handoff
+        botAiFailCounts.delete(conv.id)
+      }
       const sent = await sendText(session.id, conv._jid, result.message)
       const botMsg = {
         id: sent.id,
@@ -265,6 +276,8 @@ async function fireBotForConversation(conv, session, contact) {
       broadcast({ type: 'human.requested', conversation: conv, contact })
       console.log(`[handoff] ${contact.name} requested a human agent`)
     } else if (result) {
+      // Successful AI reply — reset failure streak
+      botAiFailCounts.delete(conv.id)
       const sent = await sendText(session.id, conv._jid, result)
       const botMsg = {
         id: sent.id,
