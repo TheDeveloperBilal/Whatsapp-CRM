@@ -157,12 +157,6 @@ export default function Login({ onLogin }: Props) {
           </button>
         </form>
 
-        {/* Hint */}
-        <p className="mt-5 text-center text-[11px] text-gray-400">
-          Default: <span className="font-mono font-semibold text-gray-500">admin</span>
-          {' / '}
-          <span className="font-mono font-semibold text-gray-500">admin123</span>
-        </p>
       </div>
 
       {/* Footer */}

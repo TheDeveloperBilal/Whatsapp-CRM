@@ -27,6 +27,8 @@ import WorkflowBuilder from '@/pages/WorkflowBuilder'
 import Team from '@/pages/Team'
 import Login from '@/pages/Login'
 import Landing from '@/pages/Landing'
+import Privacy from '@/pages/Privacy'
+import Terms from '@/pages/Terms'
 import { isLoggedIn } from '@/lib/auth'
 
 export default function App() {
@@ -50,6 +52,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         <Toaster position="bottom-right" />

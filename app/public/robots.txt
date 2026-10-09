@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /inbox
+Disallow: /contacts
+Disallow: /bots
+Disallow: /sessions
+Disallow: /automation
+Disallow: /products
+Disallow: /canned-responses
+Disallow: /broadcast
+Disallow: /campaigns
+Disallow: /intent-routing
+Disallow: /pipeline
+Disallow: /booking
+Disallow: /payments
+Disallow: /analytics
+Disallow: /knowledge-base
+Disallow: /team
+Disallow: /tenants
+Disallow: /settings
+Disallow: /system-config
+Disallow: /workflows
+
+Sitemap: https://digitalnovatech.com/sitemap.xml
