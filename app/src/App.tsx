@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route } from 'react-router'
+import { Routes, Route, Navigate } from 'react-router'
 import { Toaster } from '@/components/ui/sonner'
 import { PortalProvider } from '@/lib/store'
 import AppLayout from '@/components/layout/AppLayout'
@@ -26,6 +26,7 @@ import Workflows from '@/pages/Workflows'
 import WorkflowBuilder from '@/pages/WorkflowBuilder'
 import Team from '@/pages/Team'
 import Login from '@/pages/Login'
+import Landing from '@/pages/Landing'
 import { isLoggedIn } from '@/lib/auth'
 
 export default function App() {
@@ -38,13 +39,19 @@ export default function App() {
     return () => window.removeEventListener('portal:unauthorized', onUnauth)
   }, [])
 
+  const handleLogin = () => {
+    window.history.replaceState({}, '', '/dashboard')
+    setLoggedIn(true)
+  }
+
   if (!loggedIn) {
     return (
       <>
-        <Login onLogin={() => {
-          window.history.replaceState({}, '', '/')
-          setLoggedIn(true)
-        }} />
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login onLogin={handleLogin} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
         <Toaster position="bottom-right" />
       </>
     )
@@ -54,7 +61,8 @@ export default function App() {
     <PortalProvider>
       <Routes>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<Overview />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Overview />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/bots" element={<Bots />} />
