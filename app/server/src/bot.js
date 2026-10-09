@@ -47,7 +47,10 @@ const HANDOFF_KEYWORDS = [
 ]
 
 function isHandoffRequest(text) {
-  const lower = text.toLowerCase()
+  // Check only the last line — the burst may include old messages with keywords like
+  // "admin_kyefn8vu" (credentials), so we only look at what the customer most recently said.
+  const lastLine = text.split('\n').filter(Boolean).pop() || text
+  const lower = lastLine.toLowerCase()
   return HANDOFF_KEYWORDS.some((kw) => lower.includes(kw))
 }
 
