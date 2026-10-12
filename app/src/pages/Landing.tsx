@@ -1,7 +1,7 @@
 // Digital Nova Tech — WhatsApp Portal marketing site
 // Design: Space Grotesk (headings) + Inter (body) | Ink / Emerald / Amber palette
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import {
   Menu, X, Check, ChevronDown, ArrowRight,
@@ -146,6 +146,7 @@ function Nav() {
     ['#comparison', 'Compare'],
     ['#pricing', 'Pricing'],
     ['#faq', 'FAQ'],
+    ['mailto:hello@digitalnovatech.com', 'Contact'],
   ]
 
   return (
@@ -410,7 +411,7 @@ function StatsStrip() {
     <section style={{ background: T.em, padding: '20px 0' }}>
       <div ref={r1} style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '24px 48px', ...v1 }}>
         {[
-          [cRef1, n1, '', '+', 'Built-in features'],
+          [cRef1, n1, '', '', 'Built-in features'],
           [cRef2, n2, '', '%', 'Avg bot-handled chats'],
           [cRef3, n3, '$', '/mo', 'GoHighLevel costs'],
         ].map(([cRef, n, prefix, suffix, label], i) => (
@@ -428,6 +429,42 @@ function StatsStrip() {
         <div className="text-center">
           <div className="sg text-2xl font-bold text-white">Unlimited</div>
           <div className="inter text-xs font-medium mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>Team seats</div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Social proof marquee ──────────────────────────────────────────────────────
+// PLACEHOLDER: brands below are representative placeholders, not real customers
+const PLACEHOLDER_BRANDS = [
+  'Gulf Trading Co.', 'Nova Retail', 'Falcon Services', 'Cedar Group',
+  'Mena Supply', 'Atlas Commerce', 'Oryx Solutions', 'Summit Digital',
+  'Horizon Brands', 'Crane Logistics',
+]
+
+function SocialProof() {
+  // Double the list so the seamless marquee loop works
+  const doubled = [...PLACEHOLDER_BRANDS, ...PLACEHOLDER_BRANDS]
+  return (
+    <section style={{ background: T.surf, borderBottom: `1px solid ${T.bl}`, padding: '28px 0', overflow: 'hidden' }}>
+      <p className="inter text-center text-[10px] font-bold uppercase tracking-widest mb-4" style={{ color: T.t3 }}>
+        Teams like yours are already using WhatsApp Portal
+        <span style={{ marginLeft: 6, opacity: 0.5 }}>(representative placeholders)</span>
+      </p>
+      <div style={{ display: 'flex', overflow: 'hidden', userSelect: 'none' }} aria-hidden="true">
+        <div style={{ display: 'flex', gap: 0, animation: 'marquee 32s linear infinite', willChange: 'transform' }}>
+          {doubled.map((name, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 40, padding: '0 40px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                {/* Minimal brand chip */}
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: T.emBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className="sg font-bold text-[11px]" style={{ color: T.em }}>{name[0]}</span>
+                </div>
+                <span className="inter font-medium text-sm" style={{ color: T.t2, whiteSpace: 'nowrap' }}>{name}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -453,8 +490,12 @@ const FEATURES = [
   { icon: Building2,     title: 'Multi-Workspace',    line: 'Separate workspaces per brand or client — isolated data, one admin panel.' },
 ]
 
-const FEAT_COLORS = ['#0C9A68','#6366f1','#f59e0b','#ec4899','#3b82f6','#14b8a6',
-  '#8b5cf6','#0C9A68','#f59e0b','#6366f1','#ec4899','#3b82f6','#14b8a6','#8b5cf6','#0C9A68']
+// Strictly emerald + amber tones — no indigo, pink, or purple (Fix 5)
+const FEAT_COLORS = [
+  '#0C9A68','#B87B20','#0A8258','#C9901A','#10B57A',
+  '#9A6415','#0C9A68','#B87B20','#0A8258','#C9901A',
+  '#10B57A','#9A6415','#0C9A68','#B87B20','#0A8258',
+]
 
 function FeatureCard({ icon: Icon, title, line, color, delay }: { icon: React.ElementType; title: string; line: string; color: string; delay: number }) {
   const [ref, vis] = useReveal(delay)
@@ -654,7 +695,9 @@ function ComparisonSection() {
           </h2>
         </div>
 
-        <div style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${T.bl}`, boxShadow: '0 4px 24px rgba(0,0,0,0.05)' }}>
+        {/* Fix 6: horizontal scroll on narrow viewports */}
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${T.bl}`, boxShadow: '0 4px 24px rgba(0,0,0,0.05)', minWidth: 560 }}>
           {/* Header */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', background: T.white }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.bl}` }} />
@@ -682,6 +725,7 @@ function ComparisonSection() {
             </div>
           ))}
         </div>
+        </div>{/* end scroll wrapper */}
       </div>
     </section>
   )
@@ -896,13 +940,28 @@ function Footer() {
           ])}
         </div>
 
-        <div style={{ borderTop: `1px solid ${T.bl}`, paddingTop: 24, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ borderTop: `1px solid ${T.bl}`, paddingTop: 24, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
           <p className="inter text-xs" style={{ color: T.t3 }}>
             © {new Date().getFullYear()} Digital Nova Tech. WhatsApp Portal.
+            <span style={{ marginLeft: 12 }}>Not affiliated with WhatsApp Inc. or Meta.</span>
           </p>
-          <p className="inter text-xs" style={{ color: T.t3 }}>
-            Not affiliated with WhatsApp Inc. or Meta.
-          </p>
+          {/* Social links — placeholder hrefs until real URLs are provided */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            {[
+              { href: '#', label: 'Follow us on X (Twitter)', svg: <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L2.25 2.25h6.985l4.26 5.631L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" /> },
+              { href: '#', label: 'Follow us on LinkedIn', svg: <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2z M4 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" /> },
+              { href: '#', label: 'Follow us on Instagram', svg: <><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></> },
+              { href: '#', label: 'Subscribe on YouTube', svg: <><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" /><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white" /></> },
+            ].map(({ href, label, svg }) => (
+              <a key={label} href={href} aria-label={label} target="_blank" rel="noopener noreferrer"
+                style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${T.bl}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.t3, transition: 'color 0.15s, border-color 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = T.em; e.currentTarget.style.borderColor = T.em }}
+                onMouseLeave={e => { e.currentTarget.style.color = T.t3; e.currentTarget.style.borderColor = T.bl }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{svg}</svg>
+              </a>
+            ))}
+          </div>
         </div>
       </div>
     </footer>
@@ -922,6 +981,7 @@ export default function Landing() {
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", color: T.t1, lineHeight: 1.6 }}>
       <Nav />
       <Hero />
+      <SocialProof />
       <StatsStrip />
       <FeaturesSection />
       <DeepDive
@@ -947,7 +1007,7 @@ export default function Landing() {
           'Product catalog integration: quotes exact prices and stock levels',
           'Escalates to a human agent after 3 consecutive failures — never the first',
         ]}
-        accent="#6366f1"
+        accent={T.amber}
         reverse
         visual={<AutoRVisual />}
       />
