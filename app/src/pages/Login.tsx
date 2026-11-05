@@ -40,8 +40,11 @@ export default function Login({ onLogin }: Props) {
       const { token } = await client.login(username.trim(), password)
       setToken(token)
       onLogin()
-    } catch {
-      setError('Invalid username or password.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg === 'unauthorized') setError('Invalid username or password.')
+      else if (msg.startsWith('portal 429')) setError('Too many attempts. Please wait a minute and try again.')
+      else setError('Could not reach the server. Please try again shortly.')
     } finally {
       setLoading(false)
     }
@@ -122,6 +125,9 @@ export default function Login({ onLogin }: Props) {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your username"
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoFocus
               style={{
                 width: '100%',
