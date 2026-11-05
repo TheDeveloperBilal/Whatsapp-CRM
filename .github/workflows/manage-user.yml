@@ -1,0 +1,42 @@
+name: Manage portal user
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'check = does this username exist? reset = set password from the RESET_PASSWORD secret'
+        type: choice
+        options: [check, reset]
+        default: check
+      username:
+        description: 'Exact username (case-sensitive)'
+        type: string
+        required: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run user script on Oracle
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ACTION: ${{ inputs.action }}
+          TARGET_USER: ${{ inputs.username }}
+          NEW_PASSWORD: ${{ secrets.RESET_PASSWORD }}
+        with:
+          host: 139.185.35.250
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: ACTION,TARGET_USER,NEW_PASSWORD
+          script: |
+            cd ~/portal && git pull origin main
+            cd app/server
+            if [ "$ACTION" = "reset" ]; then
+              if [ -z "$NEW_PASSWORD" ]; then echo "RESET_PASSWORD repository secret is not set"; exit 1; fi
+              pm2 stop portal-backend
+              node scripts/users.js reset "$TARGET_USER"; rc=$?
+              pm2 start portal-backend
+              exit $rc
+            else
+              node scripts/users.js check "$TARGET_USER"
+            fi
