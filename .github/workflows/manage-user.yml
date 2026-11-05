@@ -28,15 +28,16 @@ jobs:
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
           envs: ACTION,TARGET_USER,NEW_PASSWORD
+          command_timeout: 3m
           script: |
             cd ~/portal && git pull origin main
             cd app/server
             if [ "$ACTION" = "reset" ]; then
               if [ -z "$NEW_PASSWORD" ]; then echo "RESET_PASSWORD repository secret is not set"; exit 1; fi
               pm2 stop portal-backend
-              node scripts/users.js reset "$TARGET_USER"; rc=$?
+              timeout 60 node scripts/users.js reset "$TARGET_USER"; rc=$?
               pm2 start portal-backend
               exit $rc
             else
-              node scripts/users.js check "$TARGET_USER"
+              timeout 60 node scripts/users.js check "$TARGET_USER"
             fi

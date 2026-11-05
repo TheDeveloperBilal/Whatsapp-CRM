@@ -51,3 +51,5 @@ if (cmd === 'list') {
   console.log('Usage: node scripts/users.js list | check <username> | reset <username> [newPassword]')
   process.exit(1)
 }
+// auth.js starts a login-limiter setInterval on import, which would keep this process alive forever
+process.exit(0)
