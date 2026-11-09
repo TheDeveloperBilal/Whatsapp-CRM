@@ -216,10 +216,9 @@ async function callLLM(cfg, history, inboundText) {
     systemContent += contextNote
   }
 
-  // Send up to 60 messages — covers multi-day conversations without hitting token limits
-  // Slice to -61 so the current inbound message (already in history) is excluded,
-  // then append it explicitly as the final user turn (avoids duplicate context)
-  const recentHistory = history.slice(-61, -1)
+  // history holds only messages before the customer's current burst, which is
+  // appended below as the final user turn
+  const recentHistory = history.slice(-60)
   const messages = [
     { role: 'system', content: systemContent },
     ...recentHistory.map((m) => ({
@@ -249,6 +248,8 @@ async function callLLM(cfg, history, inboundText) {
 export async function botReply(tenantId, conversation, history, inboundText) {
   const cfg = collection('botConfigs').find((c) => c.tenantId === tenantId)
   if (!cfg) return null
+  // An empty prompt makes the model invent a conversation
+  if (!inboundText?.trim()) return null
 
   if (!businessHoursOk(cfg)) {
     return cfg.fallback === 'message' ? cfg.fallbackMessage : null

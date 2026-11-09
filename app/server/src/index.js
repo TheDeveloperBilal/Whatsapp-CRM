@@ -222,6 +222,7 @@ const botDebounceTimers = new Map() // convId → timer
 const botAiFailCounts = new Map()  // convId → consecutive AI-failure count
 const BOT_HANDOFF_THRESHOLD = 3   // disable bot only after this many consecutive AI failures
 const botRunning = new Set()       // convIds currently being processed — prevents concurrent double-sends
+const AUTO_REPLY_WINDOW_MS = 15_000 // outgoing messages this soon after the customer's are instant auto-replies, not answers
 
 async function fireBotForConversation(conv, session, contact) {
   if (!conv.botEnabled) return
@@ -232,16 +233,30 @@ async function fireBotForConversation(conv, session, contact) {
       .filter((m) => m.conversationId === conv.id)
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
-    // Collect all consecutive inbound messages at the tail (the "burst")
-    const burstTexts = []
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].fromMe) break
-      burstTexts.unshift(history[i].body)
-    }
-    // Join burst into one prompt so the AI sees every message
-    const combinedText = burstTexts.join('\n')
+    let lastIn = history.length - 1
+    while (lastIn >= 0 && history[lastIn].fromMe) lastIn--
+    if (lastIn < 0) return
 
-    const result = await botReply(conv.tenantId, conv, history, combinedText)
+    // WhatsApp Business greetings and automation messages land right after the customer's
+    // message. Look past those; anything else (an AI reply, or a human agent answering
+    // later) means the customer has already been answered.
+    const lastInAt = Date.parse(history[lastIn].timestamp)
+    const answered = history
+      .slice(lastIn + 1)
+      .some((m) => m.byAi || Date.parse(m.timestamp) - lastInAt > AUTO_REPLY_WINDOW_MS)
+    if (answered) return
+
+    // The "burst": consecutive customer messages ending at lastIn, sent to the AI as one prompt
+    let burstStart = lastIn
+    while (burstStart > 0 && !history[burstStart - 1].fromMe) burstStart--
+    const combinedText = history
+      .slice(burstStart, lastIn + 1)
+      .map((m) => m.body)
+      .filter(Boolean)
+      .join('\n')
+    if (!combinedText.trim()) return
+
+    const result = await botReply(conv.tenantId, conv, history.slice(0, burstStart), combinedText)
 
     if (result) {
       // Human-like typing delay: 2–5 s random
@@ -267,6 +282,7 @@ async function fireBotForConversation(conv, session, contact) {
         type: 'text',
         status: 'sent',
         byBot: true,
+        byAi: true,
         timestamp: sent.timestamp,
       }
       upsert('messages', botMsg)
@@ -290,6 +306,7 @@ async function fireBotForConversation(conv, session, contact) {
         type: 'text',
         status: 'sent',
         byBot: true,
+        byAi: true,
         timestamp: sent.timestamp,
       }
       upsert('messages', botMsg)
