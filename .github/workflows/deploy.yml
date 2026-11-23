@@ -13,7 +13,7 @@ jobs:
       - name: Deploy to Oracle via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 139.185.35.250
+          host: 84.235.252.212
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
