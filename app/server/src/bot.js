@@ -39,20 +39,31 @@ export const aiStatus = () => ({
   fallback: NVIDIA_KEY && GEMINI_KEY ? `gemini (${GEMINI_MODEL})` : null,
 })
 
-const HANDOFF_KEYWORDS = [
-  'human', 'real person', 'real agent', 'real human', 'real customer service',
-  'agent', 'talk to someone', 'speak to someone',
-  'customer service', 'representative', 'staff',
-  'manager', 'boss', 'supervisor', 'transfer me',
-  'manusia', 'orang asli', 'cs', 'admin', 'operator',
-]
+// A clear request for a person, in a sentence of any length
+const HANDOFF_PHRASES = new RegExp(
+  [
+    String.raw`\breal (person|human|agent|customer service)\b`,
+    String.raw`\b(human|live) agent\b`,
+    String.raw`\b(talk|speak|chat) (to|with) (a |an |the |your |some )?(human|person|someone|somebody|agent|manager|supervisor|boss|staff|admin|representative|operator|customer (service|care|support))\b`,
+    String.raw`\b(connect|transfer|pass) me\b`,
+    String.raw`\bcall me\b`,
+    String.raw`\b(want|need) (a |an |to talk to a |to speak to a )?(human|real person)\b`,
+    String.raw`\bmanusia\b|\borang asli\b`,
+    String.raw`\b(insaan|insan|banday|bande|banda|admi|aadmi) se baat\b`,
+  ].join('|'),
+  'i',
+)
+// A short message that is just asking for a person ("agent", "human please", "customer service")
+const HANDOFF_SHORT = /\b(human|agent|admin|operator|cs|staff|manager|supervisor|boss|representative|person|customer (service|care|support))\b/i
 
-function isHandoffRequest(text) {
+export function isHandoffRequest(text) {
   // Check only the last line — the burst may include old messages with keywords like
   // "admin_kyefn8vu" (credentials), so we only look at what the customer most recently said.
-  const lastLine = text.split('\n').filter(Boolean).pop() || text
-  const lower = lastLine.toLowerCase()
-  return HANDOFF_KEYWORDS.some((kw) => lower.includes(kw))
+  const lastLine = (text.split('\n').filter(Boolean).pop() || text).trim()
+  if (HANDOFF_PHRASES.test(lastLine)) return true
+  // Whole words only, so "4 agents", "analytics" or "my staff need access" don't hand off
+  const words = lastLine.replace(/[^\p{L}\p{N}\s]/gu, ' ').trim().split(/\s+/).filter(Boolean)
+  return words.length <= 3 && HANDOFF_SHORT.test(words.join(' '))
 }
 
 function matchRule(rule, text) {
@@ -158,12 +169,23 @@ Keep it short and warm, like a helpful salesperson texting a customer. Use every
 export function humanize(text) {
   if (!text) return text
   const isLink = (t) => /:\/\/|^www\.|@|\.(com|co|net|org|pk|ae|io)\b/i.test(t)
+  // Keep international phone numbers out of the number and dash rules below
+  const phones = []
+  text = text.replace(/\+\d[\d\s  ‐‑().-]{6,}\d/g, (m) => {
+    phones.push(m.replace(/[  ‐‑.-]/g, ' ').replace(/\s+/g, ' '))
+    return `\u0000${phones.length - 1}\u0000`
+  })
+  return cleanText(text, isLink).replace(/\u0000(\d+)\u0000/g, (_, i) => phones[Number(i)])
+}
+
+function cleanText(text, isLink) {
   return text
     .replace(/\*\*(.+?)\*\*/gs, '$1')
     .replace(/__(.+?)__/gs, '$1')
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')
     .replace(/^[ \t]*(?:[-*•▪◦–—]|\d+[.)])[ \t]+/gm, '')
-    .replace(/(\d)[‐‑  ](\d{3})(?!\d)/g, '$1,$2')
+    .replace(/((?:Rs\.?|PKR|AED|USD|\$)\s?\d{1,3})[\u2010\u2011\u00A0\u202F](\d{3})(?!\d)/gi, '$1,$2')
+    .replace(/(\d)[\u00A0\u202F](\d)/g, '$1 $2')
     .replace(/(\d)\s*[–—‒―‐‑]\s*(\d)/g, '$1 to $2')
     .replace(/\s*[–—‒―]\s*/g, ', ')
     .replace(/(\S)[ \t]+-[ \t]+(?=\S)/g, '$1, ')
