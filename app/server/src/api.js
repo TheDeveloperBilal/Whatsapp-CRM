@@ -20,6 +20,14 @@ import {
 } from './auth.js'
 import { isValidPlan, denyFeature, denyLimit, requireFeature, planInfo } from './plans.js'
 
+// Roles a workspace may hand out. superadmin is platform-wide and never assignable here.
+const TENANT_ROLES = ['owner', 'admin', 'agent', 'viewer']
+function roleError(actor, role) {
+  if (!TENANT_ROLES.includes(role)) return `role must be one of: ${TENANT_ROLES.join(', ')}`
+  if (role === 'owner' && !['superadmin', 'owner'].includes(actor.role)) return 'only an owner can assign the owner role'
+  return null
+}
+
 // Middleware: superadmin OR tenant owner/admin
 function requireTenantAdmin(req, res, next) {
   const user = req.user
@@ -251,6 +259,8 @@ export function buildApi(broadcast) {
   r.post('/tenants/:tid/users', requireAuth, requireTenantAdmin, (req, res) => {
     const { username, password, role = 'agent', name, departmentId } = req.body
     if (!username || !password) return res.status(400).json({ error: 'username and password required' })
+    const badRole = roleError(req.user, role)
+    if (badRole) return res.status(400).json({ error: badRole })
     if (collection('users').find((u) => u.username === username))
       return res.status(409).json({ error: 'username already taken' })
     const teamSize = collection('users').filter((u) => u.tenantId === req.params.tid).length
@@ -273,6 +283,8 @@ export function buildApi(broadcast) {
     const user = collection('users').find((u) => u.id === req.params.uid && u.tenantId === req.params.tid)
     if (!user) return res.status(404).json({ error: 'not found' })
     const { name, role, departmentId } = req.body
+    const badRole = role ? roleError(req.user, role) : null
+    if (badRole) return res.status(400).json({ error: badRole })
     if (name) user.name = name
     if (role) user.role = role
     if (departmentId !== undefined) user.departmentId = departmentId
