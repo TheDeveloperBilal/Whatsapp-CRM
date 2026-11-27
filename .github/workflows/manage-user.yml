@@ -30,7 +30,7 @@ jobs:
           envs: ACTION,TARGET_USER,NEW_PASSWORD
           command_timeout: 3m
           script: |
-            cd ~/portal && git pull origin main
+            cd ~/portal && git pull --ff-only origin main || { echo "git pull failed"; exit 1; }
             cd app/server
             if [ "$ACTION" = "reset" ]; then
               if [ -z "$NEW_PASSWORD" ]; then echo "RESET_PASSWORD repository secret is not set"; exit 1; fi
