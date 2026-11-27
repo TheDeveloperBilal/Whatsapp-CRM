@@ -21,21 +21,21 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-// Primary: Google Gemini (native API — newer keys use v3+ models)
-const GEMINI_KEY  = process.env.GEMINI_API_KEY || ''
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
-
-// Fallback: Nvidia via OpenRouter
+// Primary: OpenRouter (paid, routed across many providers — far fewer outages than Gemini's free tier)
 const NVIDIA_KEY   = process.env.AI_API_KEY || ''
 const NVIDIA_BASE  = (process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '')
 const NVIDIA_MODEL = process.env.AI_MODEL || 'openai/gpt-oss-120b'
+
+// Fallback: Google Gemini (native API — newer keys use v3+ models)
+const GEMINI_KEY  = process.env.GEMINI_API_KEY || ''
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
 const hasAny = !!(GEMINI_KEY || NVIDIA_KEY)
 
 export const aiStatus = () => ({
   configured: hasAny,
-  primary: GEMINI_KEY ? `gemini (${GEMINI_MODEL})` : null,
-  fallback: NVIDIA_KEY ? `nvidia via openrouter (${NVIDIA_MODEL})` : null,
+  primary: NVIDIA_KEY ? `openrouter (${NVIDIA_MODEL})` : GEMINI_KEY ? `gemini (${GEMINI_MODEL})` : null,
+  fallback: NVIDIA_KEY && GEMINI_KEY ? `gemini (${GEMINI_MODEL})` : null,
 })
 
 const HANDOFF_KEYWORDS = [
@@ -227,18 +227,17 @@ async function callLLM(cfg, history, inboundText) {
     })),
     { role: 'user', content: inboundText },
   ]
-  // Try Gemini first, then Nvidia as fallback
-  if (GEMINI_KEY) {
+  if (NVIDIA_KEY) {
     try {
-      const reply = await callGemini(messages)
+      const reply = await callOpenRouter(NVIDIA_KEY, NVIDIA_BASE, NVIDIA_MODEL, messages)
       if (reply) return reply
     } catch (e) {
-      console.warn(`[AI] Gemini failed (${e.message}) — trying Nvidia fallback...`)
+      console.warn(`[AI] OpenRouter failed (${e.message.slice(0, 160)}) — trying Gemini fallback...`)
     }
   }
 
-  if (NVIDIA_KEY) {
-    return callOpenRouter(NVIDIA_KEY, NVIDIA_BASE, NVIDIA_MODEL, messages)
+  if (GEMINI_KEY) {
+    return callGemini(messages)
   }
 
   return null
