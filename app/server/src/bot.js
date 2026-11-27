@@ -184,7 +184,7 @@ function cleanText(text, isLink) {
     .replace(/__(.+?)__/gs, '$1')
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')
     .replace(/^[ \t]*(?:[-*•▪◦–—]|\d+[.)])[ \t]+/gm, '')
-    .replace(/((?:Rs\.?|PKR|AED|USD|\$)\s?\d{1,3})[\u2010\u2011\u00A0\u202F](\d{3})(?!\d)/gi, '$1,$2')
+    .replace(/(\d)[\u2010\u2011\u00A0\u202F](\d{3})(?!\d)/g, '$1,$2')
     .replace(/(\d)[\u00A0\u202F](\d)/g, '$1 $2')
     .replace(/(\d)\s*[–—‒―‐‑]\s*(\d)/g, '$1 to $2')
     .replace(/\s*[–—‒―]\s*/g, ', ')
