@@ -47,6 +47,7 @@ import type {
   GatewayProfile,
   DashboardStats,
   ConversationStatus,
+  TenantPatch,
 } from '@/types/portal'
 
 interface Props {
@@ -308,7 +309,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     setCampaigns((prev) => prev.filter((c) => c.id !== id))
   }, [])
 
-  const updateTenant = useCallback(async (_id: string, _patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => {}, [])
+  const updateTenant = useCallback(async (_id: string, _patch: TenantPatch) => {}, [])
   const deleteTenant = useCallback(async (_id: string) => {}, [])
   const getTenantUsers = useCallback(async (_tenantId: string): Promise<TenantUser[]> => [], [])
   const createTenantUser = useCallback(async (tenantId: string, data: { username: string; password: string; role?: string }): Promise<TenantUser> => {

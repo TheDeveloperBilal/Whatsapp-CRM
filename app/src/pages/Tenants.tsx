@@ -26,6 +26,7 @@ import { usePortal } from '@/lib/store'
 import type { TenantUser } from '@/lib/backend'
 import { BUSINESS_TYPE_META } from '@/types/portal'
 import { PLAN_OPTIONS, planName } from '@/lib/plans'
+import { toast } from 'sonner'
 // local type aliases to avoid verbatimModuleSyntax issues
 type LocalTenantRole = 'owner' | 'admin' | 'agent' | 'viewer'
 type LocalBusinessType = 'service' | 'digital' | 'physical'
@@ -83,6 +84,8 @@ export default function Tenants() {
   const [editPlan, setEditPlan] = useState('starter')
   const [editBusinessType, setEditBusinessType] = useState<LocalBusinessType>('service')
   const [editSuspended, setEditSuspended] = useState(false)
+  const [editBonus, setEditBonus] = useState('0')
+  const [editBonusOriginal, setEditBonusOriginal] = useState(0)
   const [editLoading, setEditLoading] = useState(false)
 
   // Delete confirm
@@ -133,14 +136,26 @@ export default function Tenants() {
     setEditPlan(t.plan)
     setEditBusinessType((t.businessType ?? 'service') as LocalBusinessType)
     setEditSuspended(t.suspended ?? false)
+    setEditBonus(String(t.aiQuota?.bonus ?? 0))
+    setEditBonusOriginal(t.aiQuota?.bonus ?? 0)
   }
 
   const handleEdit = async () => {
     if (!editId) return
+    const bonus = Number(editBonus)
+    if (!Number.isInteger(bonus) || bonus < 0) {
+      toast.error('Extra AI replies must be a whole number of 0 or more')
+      return
+    }
     setEditLoading(true)
     try {
-      await updateTenant(editId, { name: editName, plan: editPlan, businessType: editBusinessType, suspended: editSuspended })
+      await updateTenant(editId, {
+        name: editName, plan: editPlan, businessType: editBusinessType, suspended: editSuspended,
+        ...(bonus !== editBonusOriginal ? { aiBonusReplies: bonus } : {}),
+      })
       setEditId(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update tenant')
     } finally {
       setEditLoading(false)
     }
@@ -200,6 +215,7 @@ export default function Tenants() {
               <TableRow>
                 <TableHead>Workspace</TableHead>
                 <TableHead>Plan</TableHead>
+                <TableHead>AI this month</TableHead>
                 <TableHead>Business Type</TableHead>
                 <TableHead>Members</TableHead>
                 <TableHead>Status</TableHead>
@@ -229,6 +245,14 @@ export default function Tenants() {
                     <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize', PLAN_COLORS[t.plan])}>
                       {planName(t.plan)}
                     </span>
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {t.aiQuota?.limit != null ? (
+                      <span className={cn(t.aiQuota.exhausted ? 'text-red-600 font-medium' : t.aiQuota.used >= t.aiQuota.limit * 0.8 ? 'text-amber-600 font-medium' : 'text-muted-foreground')}>
+                        {t.aiQuota.used.toLocaleString()} / {t.aiQuota.limit.toLocaleString()}
+                        {t.aiQuota.bonus > 0 && ` (+${t.aiQuota.bonus.toLocaleString()} extra)`}
+                      </span>
+                    ) : '—'}
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -389,6 +413,11 @@ export default function Tenants() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Extra AI replies this month</Label>
+                <Input type="number" min={0} step={100} value={editBonus} onChange={(e) => setEditBonus(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Top-up on top of the plan allowance. Resets on the 1st of next month.</p>
               </div>
               <div className="flex items-center justify-between">
                 <div>

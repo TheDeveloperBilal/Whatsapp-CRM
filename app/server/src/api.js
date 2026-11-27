@@ -18,7 +18,7 @@ import {
   canManageTenant,
   loginRateLimit,
 } from './auth.js'
-import { isValidPlan, denyFeature, denyLimit, requireFeature, planInfo } from './plans.js'
+import { isValidPlan, denyFeature, denyLimit, requireFeature, planInfo, aiQuota, setAiBonus } from './plans.js'
 
 // Roles a workspace may hand out. superadmin is platform-wide and never assignable here.
 const TENANT_ROLES = ['owner', 'admin', 'agent', 'viewer']
@@ -114,6 +114,30 @@ export function buildApi(broadcast) {
     next()
   })
 
+  // Routes that address one item by id (/kb/:id, /deals/:id, /media/:msgId ...) must
+  // only reach items in the caller's workspace. Unknown ids fall through to the route's 404.
+  const ITEM_COLLECTIONS = {
+    kb: 'knowledgeBase', products: 'products', pipelines: 'pipelines', automations: 'automations',
+    'canned-responses': 'cannedResponses', campaigns: 'campaigns', intents: 'intents',
+    'pipeline-stages': 'pipelineStages', deals: 'deals', 'appointment-types': 'appointmentTypes',
+    appointments: 'appointments', 'payment-gateways': 'paymentGateways', 'payment-links': 'paymentLinks',
+    invoices: 'invoices', 'bot-rules': 'botRules', sessions: 'sessions', conversations: 'conversations',
+    contacts: 'contacts',
+  }
+  r.use((req, res, next) => {
+    const m = req.path.match(/^\/([a-z-]+)\/([^/]+)/)
+    if (!m) return next()
+    let tenantId
+    if (m[1] === 'media') {
+      const msg = (collection('messages') || []).find((x) => x.id === m[2])
+      tenantId = msg && (collection('conversations') || []).find((c) => c.id === msg.conversationId)?.tenantId
+    } else if (ITEM_COLLECTIONS[m[1]]) {
+      tenantId = (collection(ITEM_COLLECTIONS[m[1]]) || []).find((x) => x.id === m[2])?.tenantId
+    }
+    if (tenantId && !canAccessTenant(req.user, tenantId)) return res.status(403).json({ error: 'forbidden' })
+    next()
+  })
+
   // ── Admin DB import (superadmin only) ────────────────────────────────────────
   r.post('/admin/db-import', (req, res) => {
     if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'superadmin only' })
@@ -128,9 +152,10 @@ export function buildApi(broadcast) {
   })
 
   r.get('/tenants', (req, res) => {
+    const withUsage = (t) => ({ ...t, aiQuota: aiQuota(t.id) })
     const tenants = collection('tenants')
-    if (req.user.role === 'superadmin') return res.json(tenants)
-    res.json(tenants.filter((t) => t.id === req.user.tenantId))
+    if (req.user.role === 'superadmin') return res.json(tenants.map(withUsage))
+    res.json(tenants.filter((t) => t.id === req.user.tenantId).map(withUsage))
   })
 
   // ── Tenant CRUD (superadmin only) ──
@@ -184,9 +209,15 @@ export function buildApi(broadcast) {
   r.patch('/tenants/:id', requireSuperAdmin, (req, res) => {
     const t = collection('tenants').find((x) => x.id === req.params.id)
     if (!t) return res.status(404).json({ error: 'not found' })
-    const { name, plan, businessType, suspended } = req.body
+    const { name, plan, businessType, suspended, aiBonusReplies } = req.body
     if (plan !== undefined && !isValidPlan(plan))
       return res.status(400).json({ error: 'plan must be starter, business or pro' })
+    if (aiBonusReplies !== undefined) {
+      const n = Number(aiBonusReplies)
+      if (!Number.isInteger(n) || n < 0 || n > 1_000_000)
+        return res.status(400).json({ error: 'extra AI replies must be a whole number of 0 or more' })
+      setAiBonus(t.id, n)
+    }
     if (name !== undefined) t.name = name
     if (plan !== undefined) {
       t.plan = plan
@@ -195,8 +226,9 @@ export function buildApi(broadcast) {
     if (businessType !== undefined) t.businessType = businessType
     if (suspended !== undefined) t.suspended = suspended
     save()
-    broadcast({ type: 'tenant', tenant: t })
-    res.json(t)
+    const out = { ...t, aiQuota: aiQuota(t.id) }
+    broadcast({ type: 'tenant', tenant: out })
+    res.json(out)
   })
 
   // Re-normalize stored phone numbers for a tenant.

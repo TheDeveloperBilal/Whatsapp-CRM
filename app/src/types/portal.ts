@@ -44,7 +44,7 @@ export interface Notification {
   id: string
   tenantId: string
   userId: string
-  type: 'assignment' | 'mention' | 'system'
+  type: 'assignment' | 'mention' | 'system' | 'ai.quota'
   message: string
   conversationId?: string
   read: boolean
@@ -64,6 +64,24 @@ export interface PlanInfo {
   limits: { sessions: number | null; users: number | null; kbArticles: number | null; products: number | null; aiRepliesPerMonth: number | null }
   features: PlanFeature[]
   unrestricted: boolean
+  aiUsage?: { month: string; used: number; limit: number | null; bonus: number }
+}
+
+export interface AiQuota {
+  month: string
+  used: number
+  base: number | null
+  bonus: number
+  limit: number | null
+  exhausted: boolean
+}
+
+export interface TenantPatch {
+  name?: string
+  plan?: string
+  businessType?: string
+  suspended?: boolean
+  aiBonusReplies?: number
 }
 
 export interface Tenant {
@@ -73,6 +91,7 @@ export interface Tenant {
   plan: PlanId
   businessType: BusinessType
   suspended?: boolean
+  aiQuota?: AiQuota
   members: TeamMember[]
   createdAt: string
 }

@@ -11,7 +11,7 @@ import cors from 'cors'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { WebSocketServer } from 'ws'
 import { collection, upsert, save, uid } from './db.js'
-import { tenantHasFeature } from './plans.js'
+import { tenantHasFeature, recordAiReply } from './plans.js'
 import { waEvents, resumeSessions, sendText } from './wa.js'
 import { botReply, aiStatus } from './bot.js'
 import { buildApi } from './api.js'
@@ -64,15 +64,15 @@ wss.on('connection', (ws, req) => {
 })
 
 // Extract the tenantId embedded in an event payload (best-effort)
+// Events carry their workspace either at the top level or on the record they describe
+// (article, product, deal, notification ...). Events with no workspace go to everyone.
 function eventTenantId(event) {
-  return (
-    event.tenantId ??
-    event.contact?.tenantId ??
-    event.conversation?.tenantId ??
-    event.session?.tenantId ??
-    event.message?.tenantId ??
-    null
-  )
+  if (event.tenantId) return event.tenantId
+  if (event.type === 'tenant' && event.tenant?.id) return event.tenant.id
+  for (const v of Object.values(event)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && v.tenantId) return v.tenantId
+  }
+  return null
 }
 
 function broadcast(event) {
@@ -117,6 +117,17 @@ function phoneFromJid(jid) {
 }
 
 // Auto-assign a conversation to the best-matching agent based on department keywords
+function notifyTenantAdmins(tenantId, type, message) {
+  const admins = (collection('users') || []).filter((u) => u.tenantId === tenantId && ['owner', 'admin'].includes(u.role))
+  for (const u of admins) {
+    const notif = { id: uid('notif'), tenantId, userId: u.id, type, message, read: false, createdAt: new Date().toISOString() }
+    upsert('notifications', notif)
+    broadcast({ type: 'notification', notification: notif })
+  }
+  save()
+  console.log(`[notify] ${tenantId}: ${message}`)
+}
+
 function autoAssign(tenantId, conv, messageBody) {
   if (conv.assigneeId || !tenantHasFeature(tenantId, 'departments')) return
   const departments = (collection('departments') || []).filter(d => d.tenantId === tenantId)
@@ -294,16 +305,25 @@ async function fireBotForConversation(conv, session, contact) {
       save()
       broadcast({ type: 'message', message: botMsg, conversation: conv, contact })
       broadcast({ type: 'human.requested', conversation: conv, contact })
-      console.log(`[handoff] ${contact.name} requested a human agent`)
+      console.log(result.quotaExceeded
+        ? `[handoff] ${contact.name} sent to the team: monthly AI replies used up`
+        : `[handoff] ${contact.name} requested a human agent`)
     } else if (result) {
       // Successful AI reply — reset failure streak
       botAiFailCounts.delete(conv.id)
-      const sent = await sendText(session.id, conv._jid, result)
+      const isAi = typeof result === 'object' && result.ai
+      const text = isAi ? result.text : result
+      const sent = await sendText(session.id, conv._jid, text)
+      if (isAi) {
+        const q = recordAiReply(conv.tenantId)
+        if (q.reached80) notifyTenantAdmins(conv.tenantId, 'ai.quota', `You've used 80% of your AI replies this month (${q.used} of ${q.limit}).`)
+        if (q.reachedFull) notifyTenantAdmins(conv.tenantId, 'ai.quota', `You've used all ${q.limit} AI replies this month. New chats now go to your team until next month or a plan upgrade.`)
+      }
       const botMsg = {
         id: sent.id,
         conversationId: conv.id,
         fromMe: true,
-        body: result,
+        body: text,
         type: 'text',
         status: 'sent',
         byBot: true,

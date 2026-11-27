@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collection } from './db.js'
+import { aiQuota } from './plans.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -277,7 +278,8 @@ async function callLLM(cfg, history, inboundText) {
   return null
 }
 
-// returns: string | null | { handoff: true, message: string }
+// returns: string (rule or fallback text) | null | { ai: true, text } (counts toward the monthly quota)
+//        | { handoff: true, message, aiFailure?, quotaExceeded? }
 export async function botReply(tenantId, conversation, history, inboundText) {
   const cfg = collection('botConfigs').find((c) => c.tenantId === tenantId)
   if (!cfg) return null
@@ -311,15 +313,23 @@ export async function botReply(tenantId, conversation, history, inboundText) {
     if (matchRule(rule, inboundText)) return rule.response
   }
 
-  // 2. generative AI (Gemini primary → Nvidia fallback)
+  // 2. generative AI (OpenRouter primary → Gemini fallback)
   if (cfg.aiEnabled && hasAny) {
+    // Monthly allowance used up: one holding message, then the chat goes to the team
+    if (aiQuota(tenantId).exhausted) {
+      return {
+        handoff: true,
+        quotaExceeded: true,
+        message: cfg.fallbackMessage?.trim() || 'Thanks for your message! A team member will reply to you shortly.',
+      }
+    }
     let aiResult = null
     try {
       aiResult = await callLLM(cfg, history, inboundText)
     } catch (e) {
       console.error('[AI] All models failed:', e.message)
     }
-    if (aiResult) return aiResult
+    if (aiResult) return { ai: true, text: aiResult }
     // AI produced nothing — signal a transient failure; caller tracks consecutive count
     if (cfg.fallback === 'human') return { handoff: true, aiFailure: true, message: cfg.fallbackMessage }
     if (cfg.fallback === 'message') return cfg.fallbackMessage

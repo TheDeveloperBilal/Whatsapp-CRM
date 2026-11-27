@@ -3,6 +3,7 @@ import { MessageSquare, Users, Zap, Timer, Smartphone, Bot } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { usePortal } from '@/lib/store'
+import { AiUsageMeter } from '@/components/AiUsageMeter'
 
 const EMPTY_VOLUME = Array.from({ length: 7 }, (_, i) => {
   const d = new Date(Date.now() - (6 - i) * 86_400_000)
@@ -30,6 +31,8 @@ export default function Overview() {
           Multi-tenant WhatsApp support workspace. {contacts.length} contacts under management.
         </p>
       </div>
+
+      <AiUsageMeter className="max-w-xl" />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {cards.map((c) => (

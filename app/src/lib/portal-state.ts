@@ -31,6 +31,7 @@ import type {
   Agent,
   Notification,
   PlanInfo,
+  TenantPatch,
 } from '@/types/portal'
 import type { TenantUser, PortalClient } from '@/lib/backend'
 
@@ -145,7 +146,7 @@ export interface PortalState {
   deleteInvoice: (id: string) => Promise<void>
   // tenant management (superadmin)
   createTenant: (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => Promise<Tenant>
-  updateTenant: (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => Promise<void>
+  updateTenant: (id: string, patch: TenantPatch) => Promise<void>
   deleteTenant: (id: string) => Promise<void>
   getTenantUsers: (tenantId: string) => Promise<TenantUser[]>
   createTenantUser: (tenantId: string, data: { username: string; password: string; role?: string }) => Promise<TenantUser>

@@ -47,6 +47,7 @@ import type {
   Agent,
   Notification,
   PlanInfo,
+  TenantPatch,
 } from '@/types/portal'
 
 const fallbackConfig = (tenantId: string): BotConfig => ({
@@ -940,7 +941,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   )
 
   const updateTenant = useCallback(
-    async (id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) => {
+    async (id: string, patch: TenantPatch) => {
       const updated = await client.updateTenant(id, patch)
       setTenants((prev) => prev.map((t) => (t.id === id ? updated : t)))
     },

@@ -23,6 +23,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { usePortal } from '@/lib/store'
+import { AiUsageMeter } from '@/components/AiUsageMeter'
 import type { BotRule } from '@/types/portal'
 
 const emptyRule = (tenantId: string): BotRule => ({
@@ -52,6 +53,8 @@ export default function Bots() {
           portal backend and can drive the gateway's MCP tools or a Dify/OpenAI flow.
         </p>
       </div>
+
+      <AiUsageMeter className="max-w-xl" />
 
       {/* AI layer config */}
       <Card>

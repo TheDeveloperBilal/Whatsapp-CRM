@@ -34,6 +34,7 @@ import type {
   Agent,
   Notification,
   PlanInfo,
+  TenantPatch,
 } from '@/types/portal'
 import { getToken, clearToken } from '@/lib/auth'
 
@@ -292,7 +293,7 @@ export class PortalClient {
       body: JSON.stringify(data),
     })
   }
-  updateTenant(id: string, patch: { name?: string; plan?: string; businessType?: string; suspended?: boolean }) {
+  updateTenant(id: string, patch: TenantPatch) {
     return this.req<Tenant>(`/tenants/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),

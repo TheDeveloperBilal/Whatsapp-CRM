@@ -115,7 +115,64 @@ export function requireFeature(feature) {
   }
 }
 
+// ── Monthly AI reply quota ───────────────────────────────────────────────────
+// Months roll over at midnight Pakistan time (UTC+5). Usage lives on the tenant:
+// aiUsage { month, replies, warned80, warnedFull }, aiBonus { month, replies } (admin top-up)
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
+
+export function currentMonth() {
+  return new Date(Date.now() + PKT_OFFSET_MS).toISOString().slice(0, 7)
+}
+
+function findTenant(tenantId) {
+  return (collection('tenants') || []).find((t) => t.id === tenantId)
+}
+
+export function aiQuota(tenantId) {
+  const t = findTenant(tenantId)
+  const month = currentMonth()
+  const used = t?.aiUsage?.month === month ? t.aiUsage.replies : 0
+  const bonus = t?.aiBonus?.month === month ? t.aiBonus.replies : 0
+  const base = planForTenant(t).limits.aiRepliesPerMonth
+  const limit = base == null ? null : base + bonus
+  return { month, used, base, bonus, limit, exhausted: limit != null && used >= limit }
+}
+
+// Counts one AI reply; returns which alert thresholds were crossed for the first time this month
+export function recordAiReply(tenantId) {
+  const t = findTenant(tenantId)
+  if (!t) return { reached80: false, reachedFull: false }
+  const month = currentMonth()
+  if (t.aiUsage?.month !== month) t.aiUsage = { month, replies: 0, warned80: false, warnedFull: false }
+  t.aiUsage.replies += 1
+  const { used, limit } = aiQuota(tenantId)
+  const out = { reached80: false, reachedFull: false, used, limit }
+  if (limit != null && !t.aiUsage.warned80 && used >= Math.ceil(limit * 0.8)) {
+    t.aiUsage.warned80 = true
+    out.reached80 = true
+  }
+  if (limit != null && !t.aiUsage.warnedFull && used >= limit) {
+    t.aiUsage.warnedFull = true
+    out.reachedFull = true
+  }
+  save()
+  return out
+}
+
+export function setAiBonus(tenantId, replies) {
+  const t = findTenant(tenantId)
+  if (!t) return
+  t.aiBonus = { month: currentMonth(), replies }
+  // Re-arm the "used up" alert so the client hears about the new ceiling
+  if (t.aiUsage?.month === currentMonth()) t.aiUsage.warnedFull = false
+}
+
 export function planInfo(tenantId, user) {
   const plan = tenantPlan(tenantId)
-  return { id: plan.id, name: plan.name, limits: plan.limits, features: plan.features, unrestricted: user?.role === 'superadmin' }
+  const q = aiQuota(tenantId)
+  return {
+    id: plan.id, name: plan.name, limits: plan.limits, features: plan.features,
+    unrestricted: user?.role === 'superadmin',
+    aiUsage: { month: q.month, used: q.used, limit: q.limit, bonus: q.bonus },
+  }
 }
