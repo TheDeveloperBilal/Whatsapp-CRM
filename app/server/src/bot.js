@@ -146,8 +146,36 @@ async function callOpenRouter(apiKey, baseUrl, model, messages) {
   }
 }
 
-async function callLLM(cfg, history, inboundText) {
-  // Build conversation context for the system prompt
+const WHATSAPP_STYLE = `--- HOW TO WRITE (most important) ---
+You are texting on WhatsApp as a real person. Plain text only.
+Never use markdown: no **bold**, no # headings, no bullet symbols.
+Never use dashes of any kind (no "-", no em or en dashes) between words or at the start of lines. Use commas, full stops or a new line instead. Write "one time" not "one-time", "on page SEO" not "on-page SEO".
+When listing a few prices or packages, put each on its own short line, like "Identity: AED 799, up to 50 products".
+Keep it short and warm, like a helpful salesperson texting a customer. Use everyday words. Avoid words that sound like AI: certainly, absolutely, delve, foster, leverage, elevate, seamless, robust, comprehensive, cutting edge, tailored, streamline, empower, unlock, game changer, rest assured, I'd be happy to, great question, feel free to, don't hesitate.`
+
+// Safety net: WhatsApp shows markdown literally, and dashes read as machine written
+export function humanize(text) {
+  if (!text) return text
+  const isLink = (t) => /:\/\/|^www\.|@|\.(com|co|net|org|pk|ae|io)\b/i.test(t)
+  return text
+    .replace(/\*\*(.+?)\*\*/gs, '$1')
+    .replace(/__(.+?)__/gs, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^[ \t]*(?:[-*•▪◦–—]|\d+[.)])[ \t]+/gm, '')
+    .replace(/(\d)\s*[–—‒―]\s*(\d)/g, '$1 to $2')
+    .replace(/\s*[–—‒―]\s*/g, ', ')
+    .replace(/(\S)[ \t]+-[ \t]+(?=\S)/g, '$1, ')
+    .split(/(\s+)/)
+    .map((t) => (isLink(t) ? t : t.replace(/([\p{L}\p{N}])[-‐‑]+(?=[\p{L}\p{N}])/gu, '$1 ')))
+    .join('')
+    .replace(/[ \t]+([,.!?])/g, '$1')
+    .replace(/,\s*,/g, ',')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function buildSystemPrompt(cfg, history = []) {
   let systemContent = cfg.persona
 
   // Caps only guard against runaway size; at the old 3000 the pricing articles never reached the model
@@ -209,35 +237,40 @@ async function callLLM(cfg, history, inboundText) {
       `\n\n--- CONVERSATION MEMORY ---`,
       `This is an ongoing conversation that started ${daysSince === 0 ? 'today' : `${daysSince} day(s) ago`} (${first.toLocaleDateString()}).`,
       `Total messages exchanged: ${history.length}.`,
-      lastHuman ? `The customer's last topic: "${lastHuman.body.slice(0, 120)}"` : '',
+      lastHuman?.body ? `The customer's last topic: "${lastHuman.body.slice(0, 120)}"` : '',
       `Use the full chat history below to maintain continuity. Never ask for information the customer already gave.`,
       `--- END MEMORY ---`,
     ].filter(Boolean).join('\n')
     systemContent += contextNote
   }
 
+  // Last, so the style rules outweigh the formatting of the knowledge base above
+  return `${systemContent}\n\n${WHATSAPP_STYLE}`
+}
+
+async function callLLM(cfg, history, inboundText) {
   // history holds only messages before the customer's current burst, which is
   // appended below as the final user turn
   const recentHistory = history.slice(-60)
   const messages = [
-    { role: 'system', content: systemContent },
+    { role: 'system', content: buildSystemPrompt(cfg, history) },
     ...recentHistory.map((m) => ({
       role: m.fromMe ? 'assistant' : 'user',
-      content: m.body,
+      content: m.body || '[media message]',
     })),
     { role: 'user', content: inboundText },
   ]
   if (NVIDIA_KEY) {
     try {
       const reply = await callOpenRouter(NVIDIA_KEY, NVIDIA_BASE, NVIDIA_MODEL, messages)
-      if (reply) return reply
+      if (reply) return humanize(reply)
     } catch (e) {
-      console.warn(`[AI] OpenRouter failed (${e.message.slice(0, 160)}) — trying Gemini fallback...`)
+      console.warn(`[AI] OpenRouter failed (${e.message.slice(0, 160)}), trying Gemini fallback...`)
     }
   }
 
   if (GEMINI_KEY) {
-    return callGemini(messages)
+    return humanize(await callGemini(messages))
   }
 
   return null
