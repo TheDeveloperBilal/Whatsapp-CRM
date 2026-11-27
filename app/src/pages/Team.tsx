@@ -69,8 +69,8 @@ export default function Team() {
         toast.success('Department created')
       }
       setDeptDialog(false)
-    } catch {
-      toast.error('Failed to save department')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save department')
     } finally {
       setDeptSaving(false)
     }

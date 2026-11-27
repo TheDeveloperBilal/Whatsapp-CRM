@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { usePortal } from '@/lib/store'
+import { toast } from 'sonner'
 
 type ArticleLocal = { title: string; category: string; content: string }
 const blank = (): ArticleLocal => ({ title: '', category: '', content: '' })
@@ -28,6 +29,8 @@ export default function KnowledgeBase() {
       await saveKbArticle({ title: form.title, category: form.category || 'General', body: form.content })
       setForm(blank())
       setShowNew(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save article')
     } finally {
       setSaving(false)
     }

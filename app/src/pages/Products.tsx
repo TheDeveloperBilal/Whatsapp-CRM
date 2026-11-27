@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { usePortal } from '@/lib/store'
+import { toast } from 'sonner'
 
 // Local type mirrors portal.ts — avoids Vite module issue with verbatimModuleSyntax
 type ProductType = 'physical' | 'digital' | 'service'
@@ -160,6 +161,8 @@ export default function Products() {
       setForm(blankForm())
       setVariantInput('')
       setShowNew(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save product')
     } finally {
       setSaving(false)
     }

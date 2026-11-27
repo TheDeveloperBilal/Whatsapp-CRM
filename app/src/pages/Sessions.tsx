@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select'
 import { usePortal } from '@/lib/store'
 import type { WaSession } from '@/types/portal'
+import { toast } from 'sonner'
 
 const statusVariant = (s: WaSession['status']) =>
   s === 'connected' ? 'default' : s === 'disconnected' ? 'destructive' : 'secondary'
@@ -125,10 +126,14 @@ export default function Sessions() {
               <Button
                 disabled={!name.trim()}
                 onClick={async () => {
-                  const s = await createSession(name.trim(), engine)
-                  setOpen(false)
-                  setName('')
-                  if (live) connect(s)
+                  try {
+                    const s = await createSession(name.trim(), engine)
+                    setOpen(false)
+                    setName('')
+                    if (live) connect(s)
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Failed to add number')
+                  }
                 }}
               >
                 Create & connect
