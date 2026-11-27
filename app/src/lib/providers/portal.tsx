@@ -64,6 +64,19 @@ interface Props {
   updateProfile: (p: GatewayProfile) => void
 }
 
+// Backend restarts on every deploy and the tunnel occasionally drops a request;
+// retry for ~10s before declaring the backend offline
+async function retry<T>(fn: () => Promise<T>, tries = 6, delayMs = 2000): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      if (i >= tries - 1 || (e instanceof Error && e.message === 'unauthorized')) throw e
+      await new Promise((r) => setTimeout(r, delayMs))
+    }
+  }
+}
+
 export function LiveProvider({ children, profile, updateProfile }: Props) {
   const client = useMemo(
     () => new PortalClient(profile.baseUrl || DEFAULT_BACKEND_URL),
@@ -122,12 +135,10 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
   // initial tenant list + health
   useEffect(() => {
     let alive = true
-    client
-      .health()
+    retry(() => client.health())
       .then(() => alive && setBackendOnline(true))
       .catch(() => alive && setBackendOnline(false))
-    client
-      .tenants()
+    retry(() => client.tenants())
       .then((ts) => {
         if (!alive) return
         setTenants(ts)
@@ -144,8 +155,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     if (!tenant?.id) return
     let alive = true
     setLoading(true)
-    client
-      .bootstrap(tenant.id)
+    retry(() => client.bootstrap(tenant.id))
       .then((b) => {
         if (!alive) return
         setTags(b.tags)
