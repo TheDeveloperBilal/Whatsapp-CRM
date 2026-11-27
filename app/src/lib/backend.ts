@@ -33,6 +33,7 @@ import type {
   Department,
   Agent,
   Notification,
+  PlanInfo,
 } from '@/types/portal'
 import { getToken, clearToken } from '@/lib/auth'
 
@@ -60,6 +61,7 @@ export interface Bootstrap {
   departments: Department[]
   agents: Agent[]
   unreadNotifications: number
+  plan?: PlanInfo
 }
 
 export type ServerEvent =
@@ -126,7 +128,16 @@ export class PortalClient {
       window.dispatchEvent(new CustomEvent('portal:unauthorized'))
       throw new Error('unauthorized')
     }
-    if (!res.ok) throw new Error(`portal ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    if (!res.ok) {
+      const text = await res.text()
+      let detail = text
+      try {
+        detail = JSON.parse(text).error ?? text
+      } catch {
+        /* not JSON */
+      }
+      throw Object.assign(new Error(detail.slice(0, 300) || `Request failed (${res.status})`), { status: res.status })
+    }
     return res.json() as Promise<T>
   }
 

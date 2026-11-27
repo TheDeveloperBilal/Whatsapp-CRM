@@ -1,4 +1,5 @@
 import { collection, upsert, save, uid } from './db.js'
+import { tenantHasFeature } from './plans.js'
 
 // Injected at startup from index.js
 let _sendText = null
@@ -493,6 +494,7 @@ function passesTriggerFilters(wf, triggerType, context) {
 
 // ── Fire trigger: dispatches to V1 or V2 based on workflow format ─────────────
 export function fireTrigger(tenantId, triggerType, context = {}) {
+  if (!tenantHasFeature(tenantId, 'workflows')) return
   const workflows = collection('workflows').filter(
     w => w.tenantId === tenantId
       && w.status !== 'draft'

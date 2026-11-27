@@ -290,7 +290,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
   const logout = useCallback(() => { window.location.href = '/' }, [])
 
   const createTenant = useCallback(async (data: { name: string; slug: string; plan: string; businessType: string; adminUsername: string; adminPassword: string }) => {
-    const t = { id: `t${Date.now()}`, name: data.name, slug: data.slug, plan: data.plan as 'free' | 'pro' | 'business', businessType: (data.businessType ?? 'service') as 'service' | 'digital' | 'physical', suspended: false, members: [], createdAt: new Date().toISOString() }
+    const t = { id: `t${Date.now()}`, name: data.name, slug: data.slug, plan: data.plan as 'starter' | 'business' | 'pro', businessType: (data.businessType ?? 'service') as 'service' | 'digital' | 'physical', suspended: false, members: [], createdAt: new Date().toISOString() }
     return t
   }, [])
 
@@ -465,6 +465,7 @@ export function MockProvider({ children, profile, updateProfile }: Props) {
     updateProfile,
     gatewayKind,
     backendOnline: true,
+    plan: null,
     tags: seedTags,
     sessions,
     contacts,

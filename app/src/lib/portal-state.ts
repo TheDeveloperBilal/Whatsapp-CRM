@@ -30,6 +30,7 @@ import type {
   Department,
   Agent,
   Notification,
+  PlanInfo,
 } from '@/types/portal'
 import type { TenantUser, PortalClient } from '@/lib/backend'
 
@@ -48,6 +49,8 @@ export interface PortalState {
   updateProfile: (p: GatewayProfile) => void
   gatewayKind: string
   backendOnline: boolean | null
+  // subscription package of the active tenant (null until loaded / in demo mode)
+  plan: PlanInfo | null
   // data
   tags: Tag[]
   sessions: WaSession[]

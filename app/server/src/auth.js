@@ -81,17 +81,6 @@ export function canManageTenant(user, tid) {
   return user.role === 'owner' || user.role === 'admin'
 }
 
-// Plan limits
-const PLAN_LIMITS = {
-  free: { maxSessions: 1, broadcast: false },
-  pro: { maxSessions: 3, broadcast: true },
-  business: { maxSessions: Infinity, broadcast: true },
-}
-
-export function getPlanLimits(plan) {
-  return PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
-}
-
 // ── Login rate limiter (in-memory, no extra package) ──────────────────────────
 const loginAttempts = new Map()  // ip → { count, resetAt }
 setInterval(() => {

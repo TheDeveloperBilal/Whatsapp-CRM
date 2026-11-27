@@ -11,6 +11,7 @@ import cors from 'cors'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { WebSocketServer } from 'ws'
 import { collection, upsert, save, uid } from './db.js'
+import { tenantHasFeature } from './plans.js'
 import { waEvents, resumeSessions, sendText } from './wa.js'
 import { botReply, aiStatus } from './bot.js'
 import { buildApi } from './api.js'
@@ -117,7 +118,7 @@ function phoneFromJid(jid) {
 
 // Auto-assign a conversation to the best-matching agent based on department keywords
 function autoAssign(tenantId, conv, messageBody) {
-  if (conv.assigneeId) return // already assigned
+  if (conv.assigneeId || !tenantHasFeature(tenantId, 'departments')) return
   const departments = (collection('departments') || []).filter(d => d.tenantId === tenantId)
   if (!departments.length) return
 

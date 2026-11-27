@@ -16,9 +16,9 @@ import {
   requireSuperAdmin,
   canAccessTenant,
   canManageTenant,
-  getPlanLimits,
   loginRateLimit,
 } from './auth.js'
+import { isValidPlan, denyFeature, denyLimit, requireFeature, planInfo } from './plans.js'
 
 // Middleware: superadmin OR tenant owner/admin
 function requireTenantAdmin(req, res, next) {
@@ -100,6 +100,12 @@ export function buildApi(broadcast) {
   // All routes below require auth
   r.use(requireAuth)
 
+  // Every /tenants/:tid/... route is scoped to the caller's own workspace
+  r.param('tid', (req, res, next, tid) => {
+    if (!canAccessTenant(req.user, tid)) return res.status(403).json({ error: 'forbidden' })
+    next()
+  })
+
   // ── Admin DB import (superadmin only) ────────────────────────────────────────
   r.post('/admin/db-import', (req, res) => {
     if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'superadmin only' })
@@ -121,9 +127,10 @@ export function buildApi(broadcast) {
 
   // ── Tenant CRUD (superadmin only) ──
   r.post('/tenants', requireSuperAdmin, (req, res) => {
-    const { name, slug, plan = 'free', businessType = 'service', adminUsername, adminPassword } = req.body
+    const { name, slug, plan = 'starter', businessType = 'service', adminUsername, adminPassword } = req.body
     if (!name || !slug || !adminUsername || !adminPassword)
       return res.status(400).json({ error: 'name, slug, adminUsername, adminPassword required' })
+    if (!isValidPlan(plan)) return res.status(400).json({ error: 'plan must be starter, business or pro' })
     if (collection('tenants').find((t) => t.slug === slug))
       return res.status(409).json({ error: 'slug already taken' })
     if (collection('users').find((u) => u.username === adminUsername))
@@ -133,6 +140,7 @@ export function buildApi(broadcast) {
       name,
       slug,
       plan,
+      planVersion: 2,
       businessType,
       suspended: false,
       createdAt: new Date().toISOString(),
@@ -169,8 +177,13 @@ export function buildApi(broadcast) {
     const t = collection('tenants').find((x) => x.id === req.params.id)
     if (!t) return res.status(404).json({ error: 'not found' })
     const { name, plan, businessType, suspended } = req.body
+    if (plan !== undefined && !isValidPlan(plan))
+      return res.status(400).json({ error: 'plan must be starter, business or pro' })
     if (name !== undefined) t.name = name
-    if (plan !== undefined) t.plan = plan
+    if (plan !== undefined) {
+      t.plan = plan
+      t.planVersion = 2
+    }
     if (businessType !== undefined) t.businessType = businessType
     if (suspended !== undefined) t.suspended = suspended
     save()
@@ -240,6 +253,8 @@ export function buildApi(broadcast) {
     if (!username || !password) return res.status(400).json({ error: 'username and password required' })
     if (collection('users').find((u) => u.username === username))
       return res.status(409).json({ error: 'username already taken' })
+    const teamSize = collection('users').filter((u) => u.tenantId === req.params.tid).length
+    if (denyLimit(req, res, req.params.tid, 'users', teamSize, 'team members')) return
     const user = {
       id: uid('usr'),
       username,
@@ -300,7 +315,7 @@ export function buildApi(broadcast) {
     res.json((collection('departments') || []).filter(d => d.tenantId === req.params.tid))
   })
 
-  r.post('/tenants/:tid/departments', requireAuth, requireTenantAdmin, (req, res) => {
+  r.post('/tenants/:tid/departments', requireAuth, requireTenantAdmin, requireFeature('departments'), (req, res) => {
     const { name, color = '#6366f1', keywords = [] } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
     const dept = { id: uid('dept'), tenantId: req.params.tid, name, color, keywords, createdAt: new Date().toISOString() }
@@ -391,6 +406,7 @@ export function buildApi(broadcast) {
       unreadNotifications: (collection('notifications') || [])
         .filter((n) => n.tenantId === tid && n.userId === req.user.userId && !n.read).length,
       stats,
+      plan: planInfo(tid, req.user),
     })
   })
 
@@ -556,7 +572,7 @@ export function buildApi(broadcast) {
     res.json(collection('pipelines').filter((p) => p.tenantId === req.params.tid))
   })
 
-  r.post('/tenants/:tid/pipelines', (req, res) => {
+  r.post('/tenants/:tid/pipelines', requireFeature('pipeline'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { name, department = '' } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
@@ -590,14 +606,9 @@ export function buildApi(broadcast) {
 
   r.post('/sessions', (req, res) => {
     const tenantId = req.body.tenantId
-    const tenant = collection('tenants').find((t) => t.id === tenantId)
-    if (tenant) {
-      const limits = getPlanLimits(tenant.plan)
-      const existing = collection('sessions').filter((s) => s.tenantId === tenantId).length
-      if (existing >= limits.maxSessions) {
-        return res.status(402).json({ error: `plan limit: ${tenant.plan} allows max ${limits.maxSessions} session(s). Upgrade to add more.` })
-      }
-    }
+    if (!canAccessTenant(req.user, tenantId)) return res.status(403).json({ error: 'forbidden' })
+    const existing = collection('sessions').filter((s) => s.tenantId === tenantId).length
+    if (denyLimit(req, res, tenantId, 'sessions', existing, 'WhatsApp numbers')) return
     const s = {
       id: uid('s'),
       tenantId,
@@ -664,7 +675,8 @@ export function buildApi(broadcast) {
     res.json(cfg)
   })
 
-  r.post('/tenants/:tid/automations', (req, res) => {
+  r.post('/tenants/:tid/automations', requireFeature('automations'), (req, res) => {
+    if (req.body.action === 'webhook' && denyFeature(req, res, req.params.tid, 'webhooks')) return
     const rule = { ...req.body, tenantId: req.params.tid }
     if (!rule.id) rule.id = uid('a')
     if (typeof rule.enabled !== 'boolean') rule.enabled = true
@@ -677,6 +689,7 @@ export function buildApi(broadcast) {
   r.patch('/automations/:id', (req, res) => {
     const a = collection('automations').find((x) => x.id === req.params.id)
     if (!a) return res.status(404).json({ error: 'not found' })
+    if (req.body.action === 'webhook' && denyFeature(req, res, a.tenantId, 'webhooks')) return
     Object.assign(a, req.body)
     save()
     broadcast({ type: 'automation', automation: a })
@@ -718,6 +731,8 @@ export function buildApi(broadcast) {
 
   // ── Knowledge base ──
   r.post('/tenants/:tid/kb', (req, res) => {
+    const count = collection('knowledgeBase').filter((a) => a.tenantId === req.params.tid).length
+    if (denyLimit(req, res, req.params.tid, 'kbArticles', count, 'knowledge base articles')) return
     const article = { ...req.body, tenantId: req.params.tid }
     if (!article.id) article.id = uid('kb')
     upsert('knowledgeBase', article)
@@ -744,6 +759,8 @@ export function buildApi(broadcast) {
 
   // ── Products ──
   r.post('/tenants/:tid/products', (req, res) => {
+    const count = collection('products').filter((p) => p.tenantId === req.params.tid).length
+    if (denyLimit(req, res, req.params.tid, 'products', count, 'products')) return
     const p = { ...req.body, tenantId: req.params.tid }
     if (!p.id) p.id = uid('p')
     if (typeof p.active !== 'boolean') p.active = true
@@ -775,7 +792,7 @@ export function buildApi(broadcast) {
     res.json(collection('campaigns').filter((c) => c.tenantId === req.params.tid))
   })
 
-  r.post('/tenants/:tid/campaigns', (req, res) => {
+  r.post('/tenants/:tid/campaigns', requireFeature('leadCapture'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { name, type = 'organic', phone, welcomeMessage, trackingCode } = req.body
     if (!name || !phone) return res.status(400).json({ error: 'name and phone required' })
@@ -829,7 +846,8 @@ export function buildApi(broadcast) {
     res.json(collection('intents').filter((i) => i.tenantId === req.params.tid))
   })
 
-  r.post('/tenants/:tid/intents', (req, res) => {
+  r.post('/tenants/:tid/intents', requireFeature('intentRouting'), (req, res) => {
+    if (req.body.action === 'webhook' && denyFeature(req, res, req.params.tid, 'webhooks')) return
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { name, color = '#6366f1', keywords = [], action = 'none', actionTarget, priority = 0 } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
@@ -856,6 +874,7 @@ export function buildApi(broadcast) {
     const intent = collection('intents').find((x) => x.id === req.params.id)
     if (!intent) return res.status(404).json({ error: 'not found' })
     if (!canAccessTenant(req.user, intent.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    if (req.body.action === 'webhook' && denyFeature(req, res, intent.tenantId, 'webhooks')) return
     const { name, color, keywords, enabled, action, actionTarget, priority } = req.body
     if (name !== undefined) intent.name = name
     if (color !== undefined) intent.color = color
@@ -962,7 +981,7 @@ export function buildApi(broadcast) {
     res.json(collection('pipelineStages').filter((s) => s.tenantId === req.params.tid).sort((a, b) => a.order - b.order))
   })
 
-  r.post('/tenants/:tid/pipeline-stages', (req, res) => {
+  r.post('/tenants/:tid/pipeline-stages', requireFeature('pipeline'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { name, color = '#6366f1', pipelineId = null } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
@@ -1005,7 +1024,7 @@ export function buildApi(broadcast) {
     res.json(collection('deals').filter((d) => d.tenantId === req.params.tid))
   })
 
-  r.post('/tenants/:tid/deals', (req, res) => {
+  r.post('/tenants/:tid/deals', requireFeature('pipeline'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { contactId, stageId, title, value = 0, currency = 'USD', assigneeId, notes = '' } = req.body
     if (!contactId || !stageId || !title) return res.status(400).json({ error: 'contactId, stageId, title required' })
@@ -1050,7 +1069,7 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     res.json((collection('appointmentTypes') || []).filter((a) => a.tenantId === req.params.tid))
   })
-  r.post('/tenants/:tid/appointment-types', (req, res) => {
+  r.post('/tenants/:tid/appointment-types', requireFeature('booking'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { name, duration = 60, price = 0, currency = 'USD', description = '', active = true } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
@@ -1090,7 +1109,7 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     res.json((collection('appointments') || []).filter((a) => a.tenantId === req.params.tid).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)))
   })
-  r.post('/tenants/:tid/appointments', (req, res) => {
+  r.post('/tenants/:tid/appointments', requireFeature('booking'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { contactId, appointmentTypeId, date, time, notes = '', sessionId } = req.body
     if (!contactId || !appointmentTypeId || !date || !time) return res.status(400).json({ error: 'contactId, appointmentTypeId, date, time required' })
@@ -1131,7 +1150,7 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     res.json((collection('paymentGateways') || []).filter((g) => g.tenantId === req.params.tid).map(safeGateway))
   })
-  r.post('/tenants/:tid/payment-gateways', (req, res) => {
+  r.post('/tenants/:tid/payment-gateways', requireFeature('payments'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { provider, name, secretKey, publicKey = '', webhookSecret = '', live = false, active = true } = req.body
     if (!provider || !name || !secretKey) return res.status(400).json({ error: 'provider, name, secretKey required' })
@@ -1171,7 +1190,7 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     res.json((collection('paymentLinks') || []).filter((p) => p.tenantId === req.params.tid))
   })
-  r.post('/tenants/:tid/payment-links', async (req, res) => {
+  r.post('/tenants/:tid/payment-links', requireFeature('payments'), async (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { contactId, dealId, amount, currency = 'USD', description, gatewayId, expiresInHours = 24 } = req.body
     if (!contactId || !amount || !description || !gatewayId) return res.status(400).json({ error: 'contactId, amount, description, gatewayId required' })
@@ -1203,6 +1222,7 @@ export function buildApi(broadcast) {
     const link = (collection('paymentLinks') || []).find((p) => p.id === req.params.id)
     if (!link) return res.status(404).json({ error: 'not found' })
     if (!canAccessTenant(req.user, link.tenantId)) return res.status(403).json({ error: 'forbidden' })
+    if (denyFeature(req, res, link.tenantId, 'payments')) return
     const contact = collection('contacts').find((c) => c.id === link.contactId)
     if (!contact) return res.status(404).json({ error: 'contact not found' })
     const sessions = collection('sessions').filter((s) => s.tenantId === link.tenantId && s.status === 'connected')
@@ -1227,7 +1247,7 @@ export function buildApi(broadcast) {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     res.json((collection('invoices') || []).filter((i) => i.tenantId === req.params.tid))
   })
-  r.post('/tenants/:tid/invoices', (req, res) => {
+  r.post('/tenants/:tid/invoices', requireFeature('payments'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const { contactId, dealId, items = [], currency = 'USD', dueDate, notes = '' } = req.body
     if (!contactId || !items.length) return res.status(400).json({ error: 'contactId and items required' })
@@ -1263,10 +1283,7 @@ export function buildApi(broadcast) {
   })
 
   // ── Broadcast ──
-  r.post('/tenants/:tid/broadcast', async (req, res) => {
-    const tenant = collection('tenants').find((t) => t.id === req.params.tid)
-    if (tenant && !getPlanLimits(tenant.plan).broadcast)
-      return res.status(402).json({ error: `plan limit: broadcast is not available on the ${tenant.plan} plan. Upgrade to Pro or Business.` })
+  r.post('/tenants/:tid/broadcast', requireFeature('broadcast'), async (req, res) => {
     const { message, contactIds } = req.body
     if (!message || !Array.isArray(contactIds) || contactIds.length === 0)
       return res.status(400).json({ error: 'message and contactIds required' })
@@ -1324,7 +1341,7 @@ export function buildApi(broadcast) {
     res.json(collection('workflows').filter(w => w.tenantId === req.params.tid))
   })
 
-  r.post('/tenants/:tid/workflows', (req, res) => {
+  r.post('/tenants/:tid/workflows', requireFeature('workflows'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const wf = {
       id: uid('wf'),
@@ -1346,7 +1363,7 @@ export function buildApi(broadcast) {
     res.json(wf)
   })
 
-  r.put('/tenants/:tid/workflows/:wid', (req, res) => {
+  r.put('/tenants/:tid/workflows/:wid', requireFeature('workflows'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
     if (!wf) return res.status(404).json({ error: 'not found' })
@@ -1359,7 +1376,7 @@ export function buildApi(broadcast) {
     res.json(wf)
   })
 
-  r.patch('/tenants/:tid/workflows/:wid/toggle', (req, res) => {
+  r.patch('/tenants/:tid/workflows/:wid/toggle', requireFeature('workflows'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
     if (!wf) return res.status(404).json({ error: 'not found' })
@@ -1387,7 +1404,7 @@ export function buildApi(broadcast) {
     res.json(runs)
   })
 
-  r.post('/tenants/:tid/workflows/:wid/trigger', (req, res) => {
+  r.post('/tenants/:tid/workflows/:wid/trigger', requireFeature('workflows'), (req, res) => {
     if (!canAccessTenant(req.user, req.params.tid)) return res.status(403).json({ error: 'forbidden' })
     const wf = collection('workflows').find(w => w.id === req.params.wid && w.tenantId === req.params.tid)
     if (!wf) return res.status(404).json({ error: 'not found' })

@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { usePortal } from '@/lib/store'
 import type { TenantUser } from '@/lib/backend'
 import { BUSINESS_TYPE_META } from '@/types/portal'
+import { PLAN_OPTIONS, planName } from '@/lib/plans'
 // local type aliases to avoid verbatimModuleSyntax issues
 type LocalTenantRole = 'owner' | 'admin' | 'agent' | 'viewer'
 type LocalBusinessType = 'service' | 'digital' | 'physical'
@@ -43,9 +44,9 @@ const roleIcon: Record<LocalTenantRole, typeof Crown> = {
 }
 
 const PLAN_COLORS: Record<string, string> = {
-  free: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-  pro: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  business: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  starter: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+  business: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  pro: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
 }
 
 interface CreateTenantForm {
@@ -58,7 +59,7 @@ interface CreateTenantForm {
 }
 
 const emptyCreate: CreateTenantForm = {
-  name: '', slug: '', plan: 'free', businessType: 'service', adminUsername: '', adminPassword: '',
+  name: '', slug: '', plan: 'starter', businessType: 'service', adminUsername: '', adminPassword: '',
 }
 
 export default function Tenants() {
@@ -79,7 +80,7 @@ export default function Tenants() {
   // Edit modal
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
-  const [editPlan, setEditPlan] = useState('free')
+  const [editPlan, setEditPlan] = useState('starter')
   const [editBusinessType, setEditBusinessType] = useState<LocalBusinessType>('service')
   const [editSuspended, setEditSuspended] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
@@ -226,7 +227,7 @@ export default function Tenants() {
                   </TableCell>
                   <TableCell>
                     <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize', PLAN_COLORS[t.plan])}>
-                      {t.plan}
+                      {planName(t.plan)}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -306,9 +307,9 @@ export default function Tenants() {
                 <Select value={createForm.plan} onValueChange={(v) => setCreateForm((p) => ({ ...p, plan: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="free">Free — 1 session, no broadcast</SelectItem>
-                    <SelectItem value="pro">Pro — 3 sessions, broadcast</SelectItem>
-                    <SelectItem value="business">Business — unlimited sessions</SelectItem>
+                    {PLAN_OPTIONS.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.price}): {p.summary}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -370,9 +371,9 @@ export default function Tenants() {
                 <Select value={editPlan} onValueChange={setEditPlan}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="free">Free</SelectItem>
-                    <SelectItem value="pro">Pro</SelectItem>
-                    <SelectItem value="business">Business</SelectItem>
+                    {PLAN_OPTIONS.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.price})</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

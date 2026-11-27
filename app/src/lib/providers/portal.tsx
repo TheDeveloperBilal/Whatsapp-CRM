@@ -46,6 +46,7 @@ import type {
   Department,
   Agent,
   Notification,
+  PlanInfo,
 } from '@/types/portal'
 
 const fallbackConfig = (tenantId: string): BotConfig => ({
@@ -85,6 +86,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
 
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(getUser)
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
+  const [plan, setPlan] = useState<PlanInfo | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [tenantId, setTenantId] = useState<string>('')
   const tenant = useMemo(
@@ -178,6 +180,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
         setPaymentLinks(b.paymentLinks ?? [])
         setInvoices(b.invoices ?? [])
         setStats(b.stats)
+        setPlan(b.plan ?? null)
         setDepartments(b.departments ?? [])
         setAgents(b.agents ?? [])
         setUnreadNotifications(b.unreadNotifications ?? 0)
@@ -1008,6 +1011,7 @@ export function LiveProvider({ children, profile, updateProfile }: Props) {
     updateProfile,
     gatewayKind: 'WhatsApp',
     backendOnline,
+    plan,
     tags,
     sessions,
     contacts,

@@ -43,7 +43,7 @@ export default function Login({ onLogin }: Props) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : ''
       if (msg === 'unauthorized') setError('Invalid username or password.')
-      else if (msg.startsWith('portal 429')) setError('Too many attempts. Please wait a minute and try again.')
+      else if ((err as { status?: number })?.status === 429) setError('Too many attempts. Please wait a minute and try again.')
       else setError('Could not reach the server. Please try again shortly.')
     } finally {
       setLoading(false)

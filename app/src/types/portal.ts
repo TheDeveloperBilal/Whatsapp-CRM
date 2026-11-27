@@ -51,11 +51,26 @@ export interface Notification {
   createdAt: string
 }
 
+export type PlanId = 'starter' | 'business' | 'pro'
+
+export type PlanFeature =
+  | 'broadcast' | 'pipeline' | 'booking' | 'automations' | 'intentRouting'
+  | 'departments' | 'leadCapture' | 'analytics' | 'workflows' | 'webhooks' | 'payments'
+
+// Limits are null when unlimited; unrestricted is true for the superadmin
+export interface PlanInfo {
+  id: PlanId
+  name: string
+  limits: { sessions: number | null; users: number | null; kbArticles: number | null; products: number | null; aiRepliesPerMonth: number | null }
+  features: PlanFeature[]
+  unrestricted: boolean
+}
+
 export interface Tenant {
   id: string
   name: string
   slug: string
-  plan: 'free' | 'pro' | 'business'
+  plan: PlanId
   businessType: BusinessType
   suspended?: boolean
   members: TeamMember[]

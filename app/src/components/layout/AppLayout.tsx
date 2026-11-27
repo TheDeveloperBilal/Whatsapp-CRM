@@ -5,8 +5,10 @@ import {
   Building2, Settings, MessageSquareDashed, Megaphone, BookOpen, Package,
   LogOut, ShieldCheck, Wrench, MonitorSmartphone, Flame, Zap,
   KanbanSquare, CalendarCheck, CreditCard, BarChart2, Search, Menu,
-  ChevronDown, ServerCog, Bell, UserCheck,
+  ChevronDown, ServerCog, Bell, UserCheck, Lock,
 } from 'lucide-react'
+import { ROUTE_FEATURES, FEATURE_LABELS, planAllows } from '@/lib/plans'
+import type { PlanInfo } from '@/types/portal'
 import type { LucideIcon } from 'lucide-react'
 import type { BusinessType } from '@/types/portal'
 import { BUSINESS_TYPE_META } from '@/types/portal'
@@ -57,6 +59,7 @@ interface NavItem {
   icon: LucideIcon
   end?: boolean
   badge?: number | null
+  locked?: boolean
 }
 
 interface NavGroup {
@@ -188,6 +191,9 @@ function SidebarPane({
                         style={{ color: isActive ? '#c7d2fe' : 'rgba(255,255,255,0.55)' }}
                       />
                       <span className="flex-1 truncate">{item.label}</span>
+                      {item.locked && (
+                        <Lock className="size-3 shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }} aria-label="Not in your plan" />
+                      )}
                       {item.badge != null && item.badge > 0 && (
                         <span
                           className="text-[10px] font-bold text-white px-1.5 py-px rounded-full min-w-[18px] text-center leading-tight"
@@ -258,6 +264,22 @@ function SidebarPane({
   )
 }
 
+function UpgradeNotice({ feature, plan }: { feature: string; plan: PlanInfo }) {
+  return (
+    <div className="flex h-full min-h-[60vh] items-center justify-center p-6">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+          <Lock className="size-5" />
+        </div>
+        <h2 className="text-lg font-semibold text-gray-900">{feature} is not in your plan</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          You're on the <strong>{plan.name}</strong> plan. Contact us to upgrade and unlock {feature.toLowerCase()} for your team.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main layout ──────────────────────────────────────────────────────────────
 
 export default function AppLayout() {
@@ -265,6 +287,7 @@ export default function AppLayout() {
     tenants, tenant, setTenantId, sessions, conversations,
     gatewayKind, backendOnline, currentUser, logout,
     notifications, unreadNotifications, markAllNotificationsRead, markNotificationRead,
+    plan,
   } = usePortal()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -343,8 +366,15 @@ export default function AppLayout() {
         },
       ]
 
+  const lockedGroups: NavGroup[] = navGroups.map((g) => ({
+    ...g,
+    items: g.items.map((i) => ({ ...i, locked: !planAllows(plan, ROUTE_FEATURES[i.to]) })),
+  }))
+  const lockedFeature = ROUTE_FEATURES[location.pathname]
+  const pageLocked = !planAllows(plan, lockedFeature)
+
   const sidebarProps: SidebarPaneProps = {
-    groups: navGroups,
+    groups: lockedGroups,
     search,
     setSearch,
     searchOpen,
@@ -535,7 +565,7 @@ export default function AppLayout() {
             boxShadow: '0 1px 3px rgba(79,70,229,0.05)',
           }}
         >
-          <Outlet />
+          {pageLocked && plan ? <UpgradeNotice feature={FEATURE_LABELS[lockedFeature]} plan={plan} /> : <Outlet />}
         </main>
       </div>
     </div>

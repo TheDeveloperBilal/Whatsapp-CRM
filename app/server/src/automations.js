@@ -7,6 +7,7 @@
 
 import { collection, upsert, save } from './db.js'
 import { sendText } from './wa.js'
+import { tenantHasFeature } from './plans.js'
 
 // ── Structured condition evaluator ──────────────────────────────────────────
 
@@ -165,7 +166,7 @@ async function execAction(rule, ctx, broadcast) {
 export async function runAutomations(trigger, ctx, broadcast) {
   const { conv, contact } = ctx
   const tenantId = conv?.tenantId ?? contact?.tenantId
-  if (!tenantId) return
+  if (!tenantId || !tenantHasFeature(tenantId, 'automations')) return
   const rules = (collection('automations') ?? []).filter(
     (a) => a.tenantId === tenantId && a.enabled && a.trigger === trigger,
   )

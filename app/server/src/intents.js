@@ -4,6 +4,7 @@
 
 import { collection, upsert, save } from './db.js'
 import { sendText } from './wa.js'
+import { tenantHasFeature } from './plans.js'
 
 function matches(intent, body) {
   if (!intent.enabled || !intent.keywords?.length) return false
@@ -13,7 +14,7 @@ function matches(intent, body) {
 
 export async function runIntentRouting(ctx, broadcast) {
   const { conv, contact, session, message } = ctx
-  if (!message?.body) return
+  if (!message?.body || !tenantHasFeature(conv.tenantId, 'intentRouting')) return
 
   const intents = collection('intents')
     .filter((i) => i.tenantId === conv.tenantId && i.enabled)

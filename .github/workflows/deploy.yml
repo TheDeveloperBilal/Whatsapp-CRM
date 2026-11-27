@@ -19,6 +19,8 @@ jobs:
           script: |
             set -e
             cd ~/portal
+            mkdir -p ~/backups && cp app/server/data/db.json ~/backups/db-$(date -u +%Y%m%d-%H%M%S)-predeploy.json
+            find ~/backups -name "db-*-predeploy.json" -mtime +14 -delete
             git pull --ff-only origin main
             git log --oneline -1
             pm2 restart portal-backend --update-env
