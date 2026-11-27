@@ -16,9 +16,10 @@ export function loadProfile(): GatewayProfile {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const p = JSON.parse(raw) as GatewayProfile
-      // In production, never use a stale localhost URL saved from a dev session
-      const isStaleLocalhost = import.meta.env.PROD && (!p.baseUrl || p.baseUrl.includes('localhost'))
-      if (!isStaleLocalhost) return p
+      // In production the portal backend is fixed at build time; a URL saved in this browser
+      // (old dev, Railway or server addresses) would otherwise silently point it at a dead host
+      if (import.meta.env.PROD && p.kind === 'portal') return { ...p, baseUrl: DEFAULT_BACKEND_URL }
+      return p
     }
   } catch {
     /* fall through */

@@ -16,7 +16,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<GatewayProfile>(loadProfile)
   const updateProfile = useCallback((p: GatewayProfile) => {
     saveProfile(p)
-    setProfile(p)
+    setProfile(loadProfile())
   }, [])
 
   if (profile.kind === 'portal') {
